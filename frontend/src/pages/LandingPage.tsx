@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
-import { Shield, Trophy, Smartphone, Users, Zap, Lock, Star, ChevronRight } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { Shield, Trophy, Smartphone, Users, Zap, Lock, Star, ChevronRight, MapPin, Calendar, Clock } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 function useScrollReveal() {
   const ref = useRef<HTMLDivElement>(null);
@@ -35,7 +35,36 @@ function RevealSection({ children, className = "", delay = 0 }: { children: Reac
   );
 }
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
+function formatTime12(t: string) {
+  if (!t) return "";
+  const [h, m] = t.split(":").map(Number);
+  const suffix = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 || 12;
+  return `${h12}:${String(m).padStart(2, "0")} ${suffix}`;
+}
+
+function formatDateShort(d: string) {
+  if (!d) return "";
+  const [y, mo, da] = d.split("-");
+  const months = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+  return `${parseInt(da)} ${months[parseInt(mo) - 1]} ${y}`;
+}
+
 export default function LandingPage() {
+  const [events, setEvents] = useState<Array<{id:number;name:string;location:string;country:string;date:string;time:string;status:string}>>([]);
+
+  useEffect(() => {
+    fetch(`${API_URL}/api/events`)
+      .then(r => r.json())
+      .then(data => {
+        const upcoming = data.filter((e: {status:string}) => e.status === "upcoming").slice(0, 4);
+        setEvents(upcoming);
+      })
+      .catch(() => {});
+  }, []);
+
   return (
     <div className="min-h-screen bg-[#0a0a0a] overflow-hidden">
       {/* Navbar */}
@@ -115,6 +144,62 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
+
+      {/* Upcoming Events */}
+      {events.length > 0 && (
+        <section className="relative py-16 sm:py-24 bg-gradient-to-b from-[#0d0d0d] to-[#0a0a0a]">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6">
+            <RevealSection>
+              <div className="text-center mb-12">
+                <h2 className="text-2xl sm:text-4xl font-black text-white mb-3">
+                  Proximos <span className="gold-text">Campeonatos</span>
+                </h2>
+                <p className="text-gray-400">No te pierdas los mejores eventos de coleo</p>
+              </div>
+            </RevealSection>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {events.map((ev, i) => (
+                <RevealSection key={ev.id} delay={i * 150}>
+                  <div className="card-dark rounded-2xl overflow-hidden hover:border-[#b8860b]/50 transition-all h-full flex flex-col">
+                    <div className="gold-gradient p-3">
+                      <p className="text-black font-black text-sm text-center truncate">{ev.name}</p>
+                    </div>
+                    <div className="p-5 flex flex-col gap-3 flex-1">
+                      <div className="flex items-start gap-2">
+                        <MapPin size={16} className="text-[#b8860b] mt-0.5 flex-shrink-0" />
+                        <p className="text-gray-300 text-sm">{ev.location}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Calendar size={16} className="text-[#b8860b] flex-shrink-0" />
+                        <p className="text-gray-300 text-sm">{formatDateShort(ev.date)}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Clock size={16} className="text-[#b8860b] flex-shrink-0" />
+                        <p className="text-gray-300 text-sm">{formatTime12(ev.time)}</p>
+                      </div>
+                      <div className="mt-auto pt-2">
+                        <span className={"inline-block text-xs font-bold px-3 py-1 rounded-full " + (ev.country === "colombia" ? "bg-yellow-500/20 text-yellow-400" : "bg-blue-500/20 text-blue-400")}>
+                          {ev.country === "colombia" ? "COL" : "VEN"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </RevealSection>
+              ))}
+            </div>
+
+            <RevealSection delay={500}>
+              <div className="text-center mt-10">
+                <Link to="/login"
+                  className="inline-flex items-center gap-2 gold-gradient text-black font-black px-8 py-4 rounded-xl text-lg hover:opacity-90 transition shadow-lg shadow-[#b8860b]/20">
+                  <Trophy size={20} /> Ver Todos los Eventos
+                </Link>
+              </div>
+            </RevealSection>
+          </div>
+        </section>
+      )}
 
       {/* What is Coleo section */}
       <section className="relative py-16 sm:py-24">
