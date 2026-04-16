@@ -31,14 +31,6 @@ export default function LandingPage() {
         </div>
 
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 py-20 sm:py-32 text-center">
-          <div className="inline-flex items-center gap-2 bg-[#b8860b]/10 border border-[#b8860b]/30 rounded-full px-4 py-1.5 mb-6">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-green-400" />
-            </span>
-            <span className="text-[#ffd700] text-xs font-medium">El unico club de apuestas de coleo en Colombia</span>
-          </div>
-
           <img src="/logo-gold.png" alt="Club del Coleo" className="h-28 sm:h-40 mx-auto mb-6 drop-shadow-2xl" />
 
           <h1 className="text-3xl sm:text-5xl lg:text-7xl font-black mb-4 leading-tight">

@@ -274,7 +274,7 @@ function EventsPanel({ events, players, reload, showMsg, loadPlayers }: {
                   <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-[#b8860b]/20 text-[#ffd700]">{event.country === "venezuela" ? "VEN" : "COL"}</span>
                   <div>
                     <p className="font-bold text-white text-sm">{event.name}</p>
-                    <p className="text-xs text-gray-500">{event.date} {event.time} - {event.location}</p>
+                    <p className="text-xs text-gray-500">{event.date} {(() => { const [h, m] = event.time.split(":").map(Number); return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`; })()} - {event.location}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">

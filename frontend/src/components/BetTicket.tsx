@@ -19,10 +19,17 @@ export default function BetTicket({ bet }: { bet: BetData }) {
   const formatTime = (d: string) => {
     try {
       const date = new Date(d);
-      return date.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" });
+      return date.toLocaleTimeString("es-CO", { hour: "numeric", minute: "2-digit", hour12: true });
     } catch {
       return "";
     }
+  };
+
+  const formatTime12 = (t: string) => {
+    const [h, m] = t.split(":").map(Number);
+    const suffix = h >= 12 ? "PM" : "AM";
+    const hour12 = h % 12 || 12;
+    return `${hour12}:${String(m).padStart(2, "0")} ${suffix}`;
   };
 
   return (
@@ -59,7 +66,7 @@ export default function BetTicket({ bet }: { bet: BetData }) {
             <p className="font-bold text-[#ffd700] text-sm">{bet.event_name}</p>
             <div className="flex flex-wrap gap-3 text-xs text-gray-400">
               <span className="flex items-center gap-1"><Calendar size={11} className="text-[#b8860b]" /> {formatDate(bet.event_date)}</span>
-              <span className="flex items-center gap-1"><Clock size={11} className="text-[#b8860b]" /> {bet.event_time} hrs</span>
+              <span className="flex items-center gap-1"><Clock size={11} className="text-[#b8860b]" /> {formatTime12(bet.event_time)}</span>
             </div>
             <div className="flex items-center gap-1 text-xs text-gray-400">
               <MapPin size={11} className="text-[#b8860b]" /> {bet.event_location}

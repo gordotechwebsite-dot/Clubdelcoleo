@@ -32,6 +32,13 @@ export default function EventsPage() {
     return date.toLocaleDateString("es-CO", { weekday: "short", day: "numeric", month: "short" });
   };
 
+  const formatTime12 = (t: string) => {
+    const [h, m] = t.split(":").map(Number);
+    const suffix = h >= 12 ? "PM" : "AM";
+    const hour12 = h % 12 || 12;
+    return `${hour12}:${String(m).padStart(2, "0")} ${suffix}`;
+  };
+
   return (
     <div className="space-y-6 pb-20 md:pb-0">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -120,7 +127,7 @@ export default function EventsPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <Clock size={13} className="text-[#b8860b]" />
-                    <span>{event.time} hrs</span>
+                    <span>{formatTime12(event.time)}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <MapPin size={13} className="text-[#b8860b]" />

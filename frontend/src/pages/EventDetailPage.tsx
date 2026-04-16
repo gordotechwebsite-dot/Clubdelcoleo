@@ -40,6 +40,13 @@ export default function EventDetailPage() {
     return date.toLocaleDateString("es-CO", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
   };
 
+  const formatTime12 = (t: string) => {
+    const [h, m] = t.split(":").map(Number);
+    const suffix = h >= 12 ? "PM" : "AM";
+    const hour12 = h % 12 || 12;
+    return `${hour12}:${String(m).padStart(2, "0")} ${suffix}`;
+  };
+
   const formatCOP = (n: number) => n.toLocaleString("es-CO");
 
   const handleBet = async () => {
@@ -193,7 +200,7 @@ export default function EventDetailPage() {
           <p className="text-gray-400 text-sm">{event.description}</p>
           <div className="flex flex-wrap gap-4 text-sm text-gray-400">
             <span className="flex items-center gap-1.5"><Calendar size={14} className="text-[#b8860b]" /> <span className="capitalize">{formatDate(event.date)}</span></span>
-            <span className="flex items-center gap-1.5"><Clock size={14} className="text-[#b8860b]" /> {event.time} hrs</span>
+            <span className="flex items-center gap-1.5"><Clock size={14} className="text-[#b8860b]" /> {formatTime12(event.time)}</span>
             <span className="flex items-center gap-1.5"><MapPin size={14} className="text-[#b8860b]" /> {event.location}</span>
           </div>
         </div>

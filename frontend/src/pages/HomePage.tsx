@@ -22,6 +22,13 @@ export default function HomePage() {
     return date.toLocaleDateString("es-CO", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
   };
 
+  const formatTime12 = (t: string) => {
+    const [h, m] = t.split(":").map(Number);
+    const suffix = h >= 12 ? "PM" : "AM";
+    const hour12 = h % 12 || 12;
+    return `${hour12}:${String(m).padStart(2, "0")} ${suffix}`;
+  };
+
   return (
     <div className="space-y-8 pb-20 md:pb-0">
       {/* Hero */}
@@ -101,7 +108,7 @@ export default function HomePage() {
                     </div>
                     <div className="flex items-center gap-2">
                       <Clock size={14} className="text-[#b8860b]" />
-                      <span>{event.time} hrs</span>
+                      <span>{formatTime12(event.time)}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <MapPin size={14} className="text-[#b8860b]" />
