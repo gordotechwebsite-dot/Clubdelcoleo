@@ -31,7 +31,7 @@ export default function LandingPage() {
         </div>
 
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 py-20 sm:py-32 text-center">
-          <img src="/logo-gold.png" alt="Club del Coleo" className="h-28 sm:h-40 mx-auto mb-6 drop-shadow-2xl" />
+          <img src="/logo-gold.png" alt="Club del Coleo" className="h-64 sm:h-96 mx-auto mb-8 drop-shadow-2xl" />
 
           <h1 className="text-3xl sm:text-5xl lg:text-7xl font-black mb-4 leading-tight">
             <span className="gold-text">La Casa de Apuestas</span>
@@ -181,6 +181,10 @@ export default function LandingPage() {
               </div>
             ))}
           </div>
+
+          <p className="text-center text-gray-400 mt-8 max-w-xl mx-auto text-sm leading-relaxed">
+            Retira tus ganancias instantaneamente en mas de <span className="text-white font-semibold">500 puntos autorizados</span> por todo el pais
+          </p>
         </div>
       </section>
 
