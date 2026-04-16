@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Shield, Trophy, Smartphone, Users, Zap, Lock, Star, ChevronRight, Globe } from "lucide-react";
+import { Shield, Trophy, Smartphone, Users, Zap, Lock, Star, ChevronRight } from "lucide-react";
 
 export default function LandingPage() {
   return (
@@ -64,12 +64,11 @@ export default function LandingPage() {
           </div>
 
           {/* Stats row */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-3xl mx-auto">
+          <div className="grid grid-cols-3 gap-4 max-w-2xl mx-auto">
             {[
               { value: "100%", label: "Segura", icon: Shield, color: "text-green-400" },
-              { value: "24/7", label: "Disponible", icon: Zap, color: "text-[#ffd700]" },
-              { value: "2", label: "Paises", icon: Globe, color: "text-blue-400" },
               { value: "VIP", label: "Solo Invitados", icon: Lock, color: "text-purple-400" },
+              { value: "24/7", label: "Disponible", icon: Zap, color: "text-[#ffd700]" },
             ].map((stat, i) => (
               <div key={i} className="card-dark rounded-xl p-4 text-center hover:border-[#b8860b]/50 transition">
                 <stat.icon size={22} className={`${stat.color} mx-auto mb-2`} />
@@ -167,41 +166,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Countries */}
-      <section className="relative py-16 sm:py-24">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          <div className="text-center mb-12">
-            <h2 className="text-2xl sm:text-4xl font-black text-white mb-3">
-              Operamos en <span className="gold-text">2 Paises</span>
-            </h2>
-            <p className="text-gray-400">Los mejores campeonatos de los llanos</p>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-3xl mx-auto">
-            <div className="card-dark rounded-2xl p-8 text-center hover:border-[#b8860b]/50 transition-all group">
-              <div className="w-16 h-16 rounded-full bg-[#b8860b]/10 border-2 border-[#b8860b]/40 flex items-center justify-center mx-auto mb-4">
-                <span className="text-[#ffd700] font-black text-lg">COL</span>
-              </div>
-              <h3 className="text-xl font-bold text-white mb-2">Colombia</h3>
-              <p className="text-gray-400 text-sm">Campeonatos en los llanos orientales, Casanare, Meta, Arauca y mas.</p>
-              <div className="mt-4 inline-flex items-center gap-1 text-[#ffd700] text-xs font-medium">
-                <span className="w-2 h-2 rounded-full bg-green-400" /> Eventos Activos
-              </div>
-            </div>
-            <div className="card-dark rounded-2xl p-8 text-center hover:border-[#b8860b]/50 transition-all group">
-              <div className="w-16 h-16 rounded-full bg-blue-500/10 border-2 border-blue-500/40 flex items-center justify-center mx-auto mb-4">
-                <span className="text-blue-400 font-black text-lg">VEN</span>
-              </div>
-              <h3 className="text-xl font-bold text-white mb-2">Venezuela</h3>
-              <p className="text-gray-400 text-sm">Los mejores coleadores de Barinas, Apure, Portuguesa y todo el llano venezolano.</p>
-              <div className="mt-4 inline-flex items-center gap-1 text-[#ffd700] text-xs font-medium">
-                <span className="w-2 h-2 rounded-full bg-green-400" /> Eventos Activos
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
       {/* Payment Methods */}
       <section className="relative py-16 sm:py-24 bg-gradient-to-b from-[#0d0d0d] to-[#0a0a0a]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
@@ -214,12 +178,12 @@ export default function LandingPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 max-w-3xl mx-auto">
             {[
-              { name: "Nequi", color: "from-purple-600/20 to-purple-900/10", border: "border-purple-500/30", text: "text-purple-400", icon: Smartphone },
-              { name: "Daviplata", color: "from-red-600/20 to-red-900/10", border: "border-red-500/30", text: "text-red-400", icon: Smartphone },
-              { name: "Bancolombia", color: "from-yellow-600/20 to-yellow-900/10", border: "border-yellow-500/30", text: "text-yellow-400", icon: Globe },
+              { name: "Nequi", logo: "/nequi-logo.png", color: "from-purple-600/20 to-purple-900/10", border: "border-purple-500/30", text: "text-purple-400" },
+              { name: "Daviplata", logo: "/daviplata-logo.png", color: "from-red-600/20 to-red-900/10", border: "border-red-500/30", text: "text-red-400" },
+              { name: "Bancolombia", logo: "/bancolombia-logo.png", color: "from-yellow-600/20 to-yellow-900/10", border: "border-yellow-500/30", text: "text-yellow-400" },
             ].map((m, i) => (
               <div key={i} className={`bg-gradient-to-b ${m.color} border ${m.border} rounded-2xl p-6 text-center hover:scale-105 transition-transform`}>
-                <m.icon size={32} className={m.text + " mb-3"} />
+                <img src={m.logo} alt={m.name} className="h-16 mx-auto mb-3 object-contain" />
                 <h3 className={`text-lg font-bold ${m.text}`}>{m.name}</h3>
                 <p className="text-gray-500 text-xs mt-1">Deposito instantaneo</p>
               </div>
