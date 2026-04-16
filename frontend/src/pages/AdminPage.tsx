@@ -32,7 +32,7 @@ interface InviteCode {
 }
 interface Stats {
   total_users: number; total_events: number; total_bets: number;
-  total_bet_amount: number; total_deposits: number; pending_bets: number;
+  total_bet_amount: number; pending_bets: number; active_events: number;
 }
 
 type Tab = "stats" | "events" | "players" | "users" | "bets" | "invites";
@@ -122,14 +122,14 @@ export default function AdminPage() {
 
 /* === STATS === */
 function StatsPanel({ stats }: { stats: Stats }) {
-  const formatCOP = (n: number) => n.toLocaleString("es-CO");
+  const formatCOP = (n: number) => (n ?? 0).toLocaleString("es-CO");
   const items = [
-    { label: "Usuarios", value: stats.total_users, color: "text-blue-400" },
-    { label: "Eventos", value: stats.total_events, color: "text-[#ffd700]" },
-    { label: "Apuestas Totales", value: stats.total_bets, color: "text-purple-400" },
-    { label: "Apuestas Pendientes", value: stats.pending_bets, color: "text-yellow-400" },
+    { label: "Usuarios", value: stats.total_users ?? 0, color: "text-blue-400" },
+    { label: "Eventos", value: stats.total_events ?? 0, color: "text-[#ffd700]" },
+    { label: "Apuestas Totales", value: stats.total_bets ?? 0, color: "text-purple-400" },
+    { label: "Apuestas Pendientes", value: stats.pending_bets ?? 0, color: "text-yellow-400" },
     { label: "Total Apostado", value: `$${formatCOP(stats.total_bet_amount)} COP`, color: "text-green-400" },
-    { label: "Total Depositos", value: `$${formatCOP(stats.total_deposits)} COP`, color: "text-cyan-400" },
+    { label: "Eventos Activos", value: stats.active_events ?? 0, color: "text-cyan-400" },
   ];
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
