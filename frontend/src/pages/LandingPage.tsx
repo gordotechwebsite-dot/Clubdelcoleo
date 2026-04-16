@@ -1,5 +1,39 @@
 import { Link } from "react-router-dom";
 import { Shield, Trophy, Smartphone, Users, Zap, Lock, Star, ChevronRight } from "lucide-react";
+import { useEffect, useRef } from "react";
+
+function useScrollReveal() {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          el.classList.add("scroll-visible");
+          observer.unobserve(el);
+        }
+      },
+      { threshold: 0.15 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  return ref;
+}
+
+function RevealSection({ children, className = "", delay = 0 }: { children: React.ReactNode; className?: string; delay?: number }) {
+  const ref = useScrollReveal();
+  return (
+    <div
+      ref={ref}
+      className={`scroll-hidden ${className}`}
+      style={{ transitionDelay: `${delay}ms` }}
+    >
+      {children}
+    </div>
+  );
+}
 
 export default function LandingPage() {
   return (
@@ -31,29 +65,37 @@ export default function LandingPage() {
         </div>
 
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 py-20 sm:py-32 text-center">
-          <img src="/logo-gold.png" alt="Club del Coleo" className="h-64 sm:h-96 mx-auto mb-8 drop-shadow-2xl" />
+          <RevealSection>
+            <img src="/logo-gold.png" alt="Club del Coleo" className="h-64 sm:h-96 mx-auto mb-8 drop-shadow-2xl" />
+          </RevealSection>
 
-          <h1 className="text-3xl sm:text-5xl lg:text-7xl font-black mb-4 leading-tight">
-            <span className="gold-text">La Casa de Apuestas</span>
-            <br />
-            <span className="text-white">del Coleo Colombiano</span>
-          </h1>
+          <RevealSection delay={150}>
+            <h1 className="text-3xl sm:text-5xl lg:text-7xl font-black mb-4 leading-tight">
+              <span className="gold-text">La Casa de Apuestas</span>
+              <br />
+              <span className="text-white">del Coleo Colombiano</span>
+            </h1>
+          </RevealSection>
 
-          <p className="text-gray-400 text-base sm:text-xl max-w-2xl mx-auto mb-8 leading-relaxed">
-            La primera y unica plataforma digital de apuestas dedicada exclusivamente al deporte del coleo.
-            Campeonatos en <span className="text-white font-semibold">Colombia</span> y <span className="text-white font-semibold">Venezuela</span>.
-          </p>
+          <RevealSection delay={300}>
+            <p className="text-gray-400 text-base sm:text-xl max-w-2xl mx-auto mb-8 leading-relaxed">
+              La primera y unica plataforma digital de apuestas dedicada exclusivamente al deporte del coleo.
+              Campeonatos en <span className="text-white font-semibold">Colombia</span> y <span className="text-white font-semibold">Venezuela</span>.
+            </p>
+          </RevealSection>
 
-          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-12">
-            <Link to="/register"
-              className="gold-gradient text-black font-black px-8 py-4 rounded-xl text-lg hover:opacity-90 transition shadow-lg shadow-[#b8860b]/20 flex items-center gap-2 w-full sm:w-auto justify-center">
-              <Zap size={20} /> Unirse al Club
-            </Link>
-            <Link to="/login"
-              className="border-2 border-[#b8860b]/50 text-[#ffd700] font-bold px-8 py-4 rounded-xl text-lg hover:bg-[#b8860b]/10 transition flex items-center gap-2 w-full sm:w-auto justify-center">
-              Ya tengo cuenta <ChevronRight size={18} />
-            </Link>
-          </div>
+          <RevealSection delay={450}>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-12">
+              <Link to="/register"
+                className="gold-gradient text-black font-black px-8 py-4 rounded-xl text-lg hover:opacity-90 transition shadow-lg shadow-[#b8860b]/20 flex items-center gap-2 w-full sm:w-auto justify-center">
+                <Zap size={20} /> Unirse al Club
+              </Link>
+              <Link to="/login"
+                className="border-2 border-[#b8860b]/50 text-[#ffd700] font-bold px-8 py-4 rounded-xl text-lg hover:bg-[#b8860b]/10 transition flex items-center gap-2 w-full sm:w-auto justify-center">
+                Ya tengo cuenta <ChevronRight size={18} />
+              </Link>
+            </div>
+          </RevealSection>
 
           {/* Stats row */}
           <div className="grid grid-cols-3 gap-4 max-w-2xl mx-auto">
@@ -62,11 +104,13 @@ export default function LandingPage() {
               { value: "VIP", label: "Solo Invitados", icon: Lock, color: "text-purple-400" },
               { value: "24/7", label: "Disponible", icon: Zap, color: "text-[#ffd700]" },
             ].map((stat, i) => (
-              <div key={i} className="card-dark rounded-xl p-4 text-center hover:border-[#b8860b]/50 transition">
-                <stat.icon size={22} className={`${stat.color} mx-auto mb-2`} />
-                <p className={`font-black text-xl ${stat.color}`}>{stat.value}</p>
-                <p className="text-xs text-gray-500 mt-0.5">{stat.label}</p>
-              </div>
+              <RevealSection key={i} delay={500 + i * 100}>
+                <div className="card-dark rounded-xl p-4 text-center hover:border-[#b8860b]/50 transition">
+                  <stat.icon size={22} className={`${stat.color} mx-auto mb-2`} />
+                  <p className={`font-black text-xl ${stat.color}`}>{stat.value}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">{stat.label}</p>
+                </div>
+              </RevealSection>
             ))}
           </div>
         </div>
@@ -75,15 +119,17 @@ export default function LandingPage() {
       {/* What is Coleo section */}
       <section className="relative py-16 sm:py-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          <div className="text-center mb-12">
-            <h2 className="text-2xl sm:text-4xl font-black text-white mb-3">
-              El Deporte del <span className="gold-text">Coleo</span>
-            </h2>
-            <p className="text-gray-400 max-w-2xl mx-auto">
-              El coleo es un deporte ecuestre tradicional de los llanos colombo-venezolanos donde el jinete debe derribar al toro
-              tomandolo por la cola. Una tradicion centenaria convertida en espectaculo deportivo.
-            </p>
-          </div>
+          <RevealSection>
+            <div className="text-center mb-12">
+              <h2 className="text-2xl sm:text-4xl font-black text-white mb-3">
+                El Deporte del <span className="gold-text">Coleo</span>
+              </h2>
+              <p className="text-gray-400 max-w-2xl mx-auto">
+                El coleo es un deporte ecuestre tradicional de los llanos colombo-venezolanos donde el jinete debe derribar al toro
+                tomandolo por la cola. Una tradicion centenaria convertida en espectaculo deportivo.
+              </p>
+            </div>
+          </RevealSection>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {[
@@ -106,16 +152,18 @@ export default function LandingPage() {
                 color: "from-purple-500/10 to-transparent",
               },
             ].map((item, i) => (
-              <div key={i} className="relative group">
-                <div className={`absolute inset-0 bg-gradient-to-b ${item.color} rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500`} />
-                <div className="relative card-dark rounded-2xl p-6 sm:p-8 hover:border-[#b8860b]/50 transition-all duration-300 h-full">
-                  <div className="w-12 h-12 rounded-xl gold-gradient flex items-center justify-center mb-5">
-                    <item.icon size={24} className="text-black" />
+              <RevealSection key={i} delay={i * 150}>
+                <div className="relative group h-full">
+                  <div className={`absolute inset-0 bg-gradient-to-b ${item.color} rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500`} />
+                  <div className="relative card-dark rounded-2xl p-6 sm:p-8 hover:border-[#b8860b]/50 transition-all duration-300 h-full">
+                    <div className="w-12 h-12 rounded-xl gold-gradient flex items-center justify-center mb-5">
+                      <item.icon size={24} className="text-black" />
+                    </div>
+                    <h3 className="text-lg font-bold text-white mb-2">{item.title}</h3>
+                    <p className="text-gray-400 text-sm leading-relaxed">{item.desc}</p>
                   </div>
-                  <h3 className="text-lg font-bold text-white mb-2">{item.title}</h3>
-                  <p className="text-gray-400 text-sm leading-relaxed">{item.desc}</p>
                 </div>
-              </div>
+              </RevealSection>
             ))}
           </div>
         </div>
@@ -124,12 +172,14 @@ export default function LandingPage() {
       {/* How it works */}
       <section className="relative py-16 sm:py-24 bg-gradient-to-b from-[#0d0d0d] to-[#0a0a0a]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          <div className="text-center mb-12">
-            <h2 className="text-2xl sm:text-4xl font-black text-white mb-3">
-              Como <span className="gold-text">Funciona</span>
-            </h2>
-            <p className="text-gray-400">En solo 4 pasos empieza a apostar</p>
-          </div>
+          <RevealSection>
+            <div className="text-center mb-12">
+              <h2 className="text-2xl sm:text-4xl font-black text-white mb-3">
+                Como <span className="gold-text">Funciona</span>
+              </h2>
+              <p className="text-gray-400">En solo 4 pasos empieza a apostar</p>
+            </div>
+          </RevealSection>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {[
@@ -138,21 +188,23 @@ export default function LandingPage() {
               { step: "03", title: "Carga tu Saldo", desc: "Deposita con Nequi, Daviplata o Bancolombia de forma segura.", icon: Smartphone },
               { step: "04", title: "Apuesta y Gana", desc: "Elige tu coleador favorito, coloca tu apuesta y disfruta del evento.", icon: Trophy },
             ].map((item, i) => (
-              <div key={i} className="relative">
-                <div className="card-dark rounded-2xl p-6 text-center hover:border-[#b8860b]/50 transition-all h-full">
-                  <div className="text-4xl font-black gold-text opacity-30 mb-3">{item.step}</div>
-                  <div className="w-14 h-14 rounded-full bg-[#b8860b]/10 border border-[#b8860b]/30 flex items-center justify-center mx-auto mb-4">
-                    <item.icon size={24} className="text-[#ffd700]" />
+              <RevealSection key={i} delay={i * 120}>
+                <div className="relative h-full">
+                  <div className="card-dark rounded-2xl p-6 text-center hover:border-[#b8860b]/50 transition-all h-full">
+                    <div className="text-4xl font-black gold-text opacity-30 mb-3">{item.step}</div>
+                    <div className="w-14 h-14 rounded-full bg-[#b8860b]/10 border border-[#b8860b]/30 flex items-center justify-center mx-auto mb-4">
+                      <item.icon size={24} className="text-[#ffd700]" />
+                    </div>
+                    <h3 className="text-base font-bold text-white mb-2">{item.title}</h3>
+                    <p className="text-gray-400 text-sm">{item.desc}</p>
                   </div>
-                  <h3 className="text-base font-bold text-white mb-2">{item.title}</h3>
-                  <p className="text-gray-400 text-sm">{item.desc}</p>
+                  {i < 3 && (
+                    <div className="hidden lg:block absolute top-1/2 -right-3 transform -translate-y-1/2 z-10">
+                      <ChevronRight size={20} className="text-[#b8860b]/40" />
+                    </div>
+                  )}
                 </div>
-                {i < 3 && (
-                  <div className="hidden lg:block absolute top-1/2 -right-3 transform -translate-y-1/2 z-10">
-                    <ChevronRight size={20} className="text-[#b8860b]/40" />
-                  </div>
-                )}
-              </div>
+              </RevealSection>
             ))}
           </div>
         </div>
@@ -161,12 +213,14 @@ export default function LandingPage() {
       {/* Payment Methods */}
       <section className="relative py-16 sm:py-24 bg-gradient-to-b from-[#0d0d0d] to-[#0a0a0a]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          <div className="text-center mb-12">
-            <h2 className="text-2xl sm:text-4xl font-black text-white mb-3">
-              Metodos de <span className="gold-text">Pago</span>
-            </h2>
-            <p className="text-gray-400">Recarga tu saldo de forma rapida y segura</p>
-          </div>
+          <RevealSection>
+            <div className="text-center mb-12">
+              <h2 className="text-2xl sm:text-4xl font-black text-white mb-3">
+                Metodos de <span className="gold-text">Pago</span>
+              </h2>
+              <p className="text-gray-400">Recarga tu saldo de forma rapida y segura</p>
+            </div>
+          </RevealSection>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 max-w-3xl mx-auto">
             {[
@@ -174,49 +228,55 @@ export default function LandingPage() {
               { name: "Daviplata", logo: "/daviplata-logo.png", color: "from-red-600/20 to-red-900/10", border: "border-red-500/30", text: "text-red-400" },
               { name: "Bancolombia", logo: "/bancolombia-logo.png", color: "from-yellow-600/20 to-yellow-900/10", border: "border-yellow-500/30", text: "text-yellow-400" },
             ].map((m, i) => (
-              <div key={i} className={`bg-gradient-to-b ${m.color} border ${m.border} rounded-2xl p-6 text-center hover:scale-105 transition-transform`}>
-                <img src={m.logo} alt={m.name} className="h-16 mx-auto mb-3 object-contain" />
-                <h3 className={`text-lg font-bold ${m.text}`}>{m.name}</h3>
-                <p className="text-gray-500 text-xs mt-1">Deposito instantaneo</p>
-              </div>
+              <RevealSection key={i} delay={i * 150}>
+                <div className={`bg-gradient-to-b ${m.color} border ${m.border} rounded-2xl p-6 text-center hover:scale-105 transition-transform`}>
+                  <img src={m.logo} alt={m.name} className="h-16 mx-auto mb-3 object-contain" />
+                  <h3 className={`text-lg font-bold ${m.text}`}>{m.name}</h3>
+                  <p className="text-gray-500 text-xs mt-1">Deposito instantaneo</p>
+                </div>
+              </RevealSection>
             ))}
           </div>
 
-          <p className="text-center text-gray-400 mt-8 max-w-xl mx-auto text-sm leading-relaxed">
-            Retira tus ganancias instantaneamente en mas de <span className="text-white font-semibold">500 puntos autorizados</span> por todo el pais
-          </p>
+          <RevealSection delay={400}>
+            <p className="text-center text-gray-400 mt-8 max-w-xl mx-auto text-sm leading-relaxed">
+              Retira tus ganancias instantaneamente en mas de <span className="text-white font-semibold">500 puntos autorizados</span> por todo el pais
+            </p>
+          </RevealSection>
         </div>
       </section>
 
       {/* Trust & Security */}
       <section className="relative py-16 sm:py-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          <div className="card-dark rounded-2xl p-8 sm:p-12">
-            <div className="text-center mb-10">
-              <Shield size={40} className="text-[#ffd700] mx-auto mb-4" />
-              <h2 className="text-2xl sm:text-3xl font-black text-white mb-3">
-                Seguridad y <span className="gold-text">Confianza</span>
-              </h2>
-              <p className="text-gray-400 max-w-xl mx-auto text-sm">
-                Tu seguridad es nuestra prioridad. Operamos con los mas altos estandares de la industria.
-              </p>
-            </div>
+          <RevealSection>
+            <div className="card-dark rounded-2xl p-8 sm:p-12">
+              <div className="text-center mb-10">
+                <Shield size={40} className="text-[#ffd700] mx-auto mb-4" />
+                <h2 className="text-2xl sm:text-3xl font-black text-white mb-3">
+                  Seguridad y <span className="gold-text">Confianza</span>
+                </h2>
+                <p className="text-gray-400 max-w-xl mx-auto text-sm">
+                  Tu seguridad es nuestra prioridad. Operamos con los mas altos estandares de la industria.
+                </p>
+              </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {[
-                { icon: Lock, title: "Acceso Privado", desc: "Solo por invitacion, comunidad exclusiva y verificada" },
-                { icon: Shield, title: "Datos Protegidos", desc: "Encriptacion SSL y proteccion de datos personales" },
-                { icon: Trophy, title: "Pagos Garantizados", desc: "Tus ganancias se acreditan automaticamente" },
-                { icon: Users, title: "Juego Responsable", desc: "Limites de apuesta y herramientas de control" },
-              ].map((item, i) => (
-                <div key={i} className="bg-[#0a0a0a] rounded-xl p-5 text-center">
-                  <item.icon size={24} className="text-[#b8860b] mx-auto mb-3" />
-                  <h4 className="text-sm font-bold text-white mb-1">{item.title}</h4>
-                  <p className="text-xs text-gray-500">{item.desc}</p>
-                </div>
-              ))}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {[
+                  { icon: Lock, title: "Acceso Privado", desc: "Solo por invitacion, comunidad exclusiva y verificada" },
+                  { icon: Shield, title: "Datos Protegidos", desc: "Encriptacion SSL y proteccion de datos personales" },
+                  { icon: Trophy, title: "Pagos Garantizados", desc: "Tus ganancias se acreditan automaticamente" },
+                  { icon: Users, title: "Juego Responsable", desc: "Limites de apuesta y herramientas de control" },
+                ].map((item, i) => (
+                  <div key={i} className="bg-[#0a0a0a] rounded-xl p-5 text-center">
+                    <item.icon size={24} className="text-[#b8860b] mx-auto mb-3" />
+                    <h4 className="text-sm font-bold text-white mb-1">{item.title}</h4>
+                    <p className="text-xs text-gray-500">{item.desc}</p>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          </RevealSection>
         </div>
       </section>
 
@@ -225,7 +285,7 @@ export default function LandingPage() {
         <div className="absolute inset-0 overflow-hidden">
           <div className="absolute bottom-0 left-1/3 w-96 h-96 bg-[#b8860b]/10 rounded-full blur-3xl" />
         </div>
-        <div className="relative max-w-3xl mx-auto px-4 sm:px-6 text-center">
+        <RevealSection className="relative max-w-3xl mx-auto px-4 sm:px-6 text-center">
           <img src="/logo-gold.png" alt="Club del Coleo" className="h-20 mx-auto mb-6 opacity-80" />
           <h2 className="text-2xl sm:text-4xl font-black text-white mb-4">
             Entra al <span className="gold-text">Club</span>
@@ -238,7 +298,7 @@ export default function LandingPage() {
             className="inline-flex items-center gap-2 gold-gradient text-black font-black px-10 py-4 rounded-xl text-lg hover:opacity-90 transition shadow-lg shadow-[#b8860b]/20">
             <Zap size={20} /> Registrarse Ahora
           </Link>
-        </div>
+        </RevealSection>
       </section>
 
       {/* Footer */}
