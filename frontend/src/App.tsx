@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { getUser } from "./lib/api";
 import Layout from "./components/Layout";
+import WhatsAppBubble from "./components/WhatsAppBubble";
 import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
@@ -45,6 +46,7 @@ export default function App() {
         <Route path="/admin" element={<AdminRoute><AdminPage /></AdminRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      <WhatsAppBubble />
     </BrowserRouter>
   );
 }
