@@ -2,7 +2,8 @@ import sqlite3
 import os
 from contextlib import contextmanager
 
-DB_PATH = os.environ.get("DB_PATH", "clubdelcoleo.db")
+_default_db = "/data/app.db" if os.path.isdir("/data") else "clubdelcoleo.db"
+DB_PATH = os.environ.get("DB_PATH", _default_db)
 
 
 def get_db_path():
