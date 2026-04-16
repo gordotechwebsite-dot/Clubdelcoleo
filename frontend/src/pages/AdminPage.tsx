@@ -271,7 +271,7 @@ function EventsPanel({ events, players, reload, showMsg, loadPlayers }: {
             <button onClick={() => setExpanded(expanded === event.id ? null : event.id)} className="w-full text-left p-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
-                  <span>{event.country === "venezuela" ? "\ud83c\uddfb\ud83c\uddea" : "\ud83c\udde8\ud83c\uddf4"}</span>
+                  <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-[#b8860b]/20 text-[#ffd700]">{event.country === "venezuela" ? "VEN" : "COL"}</span>
                   <div>
                     <p className="font-bold text-white text-sm">{event.name}</p>
                     <p className="text-xs text-gray-500">{event.date} {event.time} - {event.location}</p>

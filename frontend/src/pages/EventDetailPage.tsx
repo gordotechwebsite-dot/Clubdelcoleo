@@ -180,7 +180,7 @@ export default function EventDetailPage() {
         <div className="p-5 sm:p-6 space-y-3">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-2">
-              <span className="text-lg">{event.country === "venezuela" ? "\ud83c\uddfb\ud83c\uddea" : "\ud83c\udde8\ud83c\uddf4"}</span>
+              <span className="text-xs font-bold px-2 py-0.5 rounded bg-[#b8860b]/20 text-[#ffd700]">{event.country === "venezuela" ? "VEN" : "COL"}</span>
               <h1 className="text-xl sm:text-2xl font-bold text-white">{event.name}</h1>
             </div>
             <span className={`shrink-0 text-xs font-bold px-3 py-1 rounded-full ${

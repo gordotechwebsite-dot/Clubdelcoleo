@@ -52,8 +52,8 @@ export default function EventsPage() {
       <div className="flex gap-2">
         {[
           { key: "all", label: "Todos los Paises", flag: "" },
-          { key: "colombia", label: "Colombia", flag: "\ud83c\udde8\ud83c\uddf4" },
-          { key: "venezuela", label: "Venezuela", flag: "\ud83c\uddfb\ud83c\uddea" },
+          { key: "colombia", label: "Colombia", flag: "COL" },
+          { key: "venezuela", label: "Venezuela", flag: "VEN" },
         ].map((c) => (
           <button key={c.key} onClick={() => setCountry(c.key)}
             className={`px-4 py-2 rounded-lg text-xs font-medium transition flex items-center gap-1.5 ${
@@ -101,7 +101,7 @@ export default function EventsPage() {
               <div className="p-5 space-y-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <span className="text-base">{event.country === "venezuela" ? "\ud83c\uddfb\ud83c\uddea" : "\ud83c\udde8\ud83c\uddf4"}</span>
+                    <span className="text-xs font-bold px-2 py-0.5 rounded bg-[#b8860b]/20 text-[#ffd700]">{event.country === "venezuela" ? "VEN" : "COL"}</span>
                     <h3 className="font-bold text-white group-hover:text-[#ffd700] transition text-sm leading-tight">{event.name}</h3>
                   </div>
                   <span className={`shrink-0 text-xs font-bold px-2 py-0.5 rounded-full ${

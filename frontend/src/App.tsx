@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { getUser } from "./lib/api";
 import Layout from "./components/Layout";
+import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import HomePage from "./pages/HomePage";
@@ -9,6 +10,12 @@ import EventDetailPage from "./pages/EventDetailPage";
 import WalletPage from "./pages/WalletPage";
 import MyBetsPage from "./pages/MyBetsPage";
 import AdminPage from "./pages/AdminPage";
+
+function PublicRoute({ children }: { children: React.ReactNode }) {
+  const user = getUser();
+  if (user) return <Navigate to="/home" replace />;
+  return <>{children}</>;
+}
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const user = getUser();
@@ -19,7 +26,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 function AdminRoute({ children }: { children: React.ReactNode }) {
   const user = getUser();
   if (!user) return <Navigate to="/login" replace />;
-  if (!user.is_admin) return <Navigate to="/" replace />;
+  if (!user.is_admin) return <Navigate to="/home" replace />;
   return <Layout>{children}</Layout>;
 }
 
@@ -27,9 +34,10 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/" element={<PublicRoute><LandingPage /></PublicRoute>} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
-        <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
+        <Route path="/home" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
         <Route path="/events" element={<ProtectedRoute><EventsPage /></ProtectedRoute>} />
         <Route path="/events/:id" element={<ProtectedRoute><EventDetailPage /></ProtectedRoute>} />
         <Route path="/wallet" element={<ProtectedRoute><WalletPage /></ProtectedRoute>} />

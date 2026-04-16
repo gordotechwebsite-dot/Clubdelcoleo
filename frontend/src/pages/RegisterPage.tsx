@@ -42,7 +42,7 @@ export default function RegisterPage() {
       setToken(res.access_token);
       const me = await api.getMe();
       setUser(me);
-      navigate("/");
+      navigate("/home");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al registrarse");
     } finally {
