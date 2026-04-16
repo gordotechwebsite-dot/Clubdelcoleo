@@ -265,10 +265,10 @@ export default function EventDetailPage() {
         <div className="fixed inset-0 z-40" onClick={() => { setSelectedPlayer(null); setBetAmount(""); setBetError(""); }}>
           <div className="absolute inset-0 bg-black/50" />
           <div
-            className="absolute bottom-0 left-0 right-0 animate-slide-up"
+            className="absolute bottom-0 left-0 right-0 animate-slide-up max-h-[85vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="bg-[#111] border-t border-[#b8860b]/40 rounded-t-2xl p-5 space-y-4 max-w-2xl mx-auto">
+            <div className="bg-[#111] border-t border-[#b8860b]/40 rounded-t-2xl p-5 pb-24 sm:pb-5 space-y-4 max-w-2xl mx-auto">
               {/* Handle bar */}
               <div className="flex justify-center">
                 <div className="w-10 h-1 bg-gray-600 rounded-full" />
