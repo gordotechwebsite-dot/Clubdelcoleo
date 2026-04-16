@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import {
   Shield, Users, Calendar, Trophy, BarChart3, Ticket, Plus, Trash2, Save,
-  X, ChevronDown, ChevronUp, Radio, RefreshCw,
+  X, ChevronDown, ChevronUp, Radio, RefreshCw, ArrowUpCircle, ArrowDownCircle, CheckCircle2, XCircle, Crown,
 } from "lucide-react";
 
 interface Event {
@@ -34,8 +34,16 @@ interface Stats {
   total_users: number; total_events: number; total_bets: number;
   total_bet_amount: number; pending_bets: number; active_events: number;
 }
+interface DepositReq {
+  id: number; user_id: number; username: string; amount: number; method: string;
+  reference: string; status: string; created_at: string;
+}
+interface WithdrawalReq {
+  id: number; user_id: number; username: string; amount: number; method: string;
+  account_number: string; status: string; created_at: string;
+}
 
-type Tab = "stats" | "events" | "players" | "users" | "bets" | "invites";
+type Tab = "stats" | "events" | "players" | "users" | "bets" | "invites" | "deposits" | "withdrawals";
 
 export default function AdminPage() {
   const [tab, setTab] = useState<Tab>("stats");
@@ -45,6 +53,8 @@ export default function AdminPage() {
   const [users, setUsers] = useState<UserData[]>([]);
   const [bets, setBets] = useState<BetData[]>([]);
   const [invites, setInvites] = useState<InviteCode[]>([]);
+  const [adminDeposits, setAdminDeposits] = useState<DepositReq[]>([]);
+  const [adminWithdrawals, setAdminWithdrawals] = useState<WithdrawalReq[]>([]);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState("");
 
@@ -61,6 +71,8 @@ export default function AdminPage() {
       else if (t === "users") { const u = await api.getUsers(); setUsers(u); }
       else if (t === "bets") { const b = await api.getAllBets(); setBets(b); }
       else if (t === "invites") { const i = await api.getInviteCodes(); setInvites(i); }
+      else if (t === "deposits") { const d = await api.getAdminDeposits(); setAdminDeposits(d); }
+      else if (t === "withdrawals") { const w = await api.getAdminWithdrawals(); setAdminWithdrawals(w); }
     } catch (err) { console.error(err); }
     setLoading(false);
   };
@@ -73,6 +85,8 @@ export default function AdminPage() {
     { key: "stats", label: "Estadisticas", icon: BarChart3 },
     { key: "events", label: "Eventos", icon: Calendar },
     { key: "players", label: "Jugadores", icon: Trophy },
+    { key: "deposits", label: "Depositos", icon: ArrowUpCircle },
+    { key: "withdrawals", label: "Retiros", icon: ArrowDownCircle },
     { key: "users", label: "Usuarios", icon: Users },
     { key: "bets", label: "Apuestas", icon: Ticket },
     { key: "invites", label: "Invitaciones", icon: Shield },
@@ -113,6 +127,8 @@ export default function AdminPage() {
           {tab === "players" && <PlayersPanel players={players} reload={() => loadTab("players")} showMsg={showMsg} />}
           {tab === "users" && <UsersPanel users={users} reload={() => loadTab("users")} showMsg={showMsg} />}
           {tab === "bets" && <BetsPanel bets={bets} />}
+          {tab === "deposits" && <DepositsPanel deposits={adminDeposits} reload={() => loadTab("deposits")} showMsg={showMsg} />}
+          {tab === "withdrawals" && <WithdrawalsPanel withdrawals={adminWithdrawals} reload={() => loadTab("withdrawals")} showMsg={showMsg} />}
           {tab === "invites" && <InvitesPanel invites={invites} reload={() => loadTab("invites")} showMsg={showMsg} />}
         </>
       )}
@@ -359,6 +375,30 @@ function EventsPanel({ events, players, reload, showMsg, loadPlayers }: {
                   )}
                 </div>
 
+                {/* Winner Declaration */}
+                {event.status === "upcoming" || event.status === "live" ? (
+                  event.players && event.players.length > 0 ? (
+                    <div className="space-y-2">
+                      <p className="text-xs text-gray-400 font-medium flex items-center gap-1"><Crown size={12} className="text-[#ffd700]" /> Declarar Ganador</p>
+                      <div className="flex flex-wrap gap-2">
+                        {event.players.map((p) => (
+                          <button key={p.player_id} onClick={async () => {
+                            if (!confirm(`Declarar a ${p.name} como ganador de ${event.name}?`)) return;
+                            try {
+                              await api.declareWinner(event.id, p.player_id);
+                              showMsg(`${p.name} declarado como ganador!`);
+                              reload();
+                            } catch (err) { showMsg(err instanceof Error ? err.message : "Error"); }
+                          }}
+                            className="px-3 py-1.5 text-xs bg-[#b8860b]/10 text-[#ffd700] border border-[#b8860b]/30 rounded-lg hover:bg-[#b8860b]/20 transition">
+                            {p.name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null
+                ) : null}
+
                 <button onClick={() => handleDelete(event.id)}
                   className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300">
                   <Trash2 size={12} /> Eliminar Evento
@@ -525,6 +565,144 @@ function BetsPanel({ bets }: { bets: BetData[] }) {
         ))}
         {bets.length === 0 && <p className="text-center text-gray-500 text-sm py-8">No hay apuestas registradas</p>}
       </div>
+    </div>
+  );
+}
+
+/* === DEPOSITS === */
+function DepositsPanel({ deposits, reload, showMsg }: {
+  deposits: DepositReq[]; reload: () => void; showMsg: (m: string) => void;
+}) {
+  const formatCOP = (n: number) => n.toLocaleString("es-CO");
+  const formatDate = (d: string) => {
+    try { return new Date(d).toLocaleDateString("es-CO", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true }); }
+    catch { return d; }
+  };
+  const handleReview = async (id: number, status: string) => {
+    try {
+      await api.reviewDeposit(id, status);
+      showMsg(`Deposito ${status === "approved" ? "aprobado" : "rechazado"}`);
+      reload();
+    } catch (err) { showMsg(err instanceof Error ? err.message : "Error"); }
+  };
+  const pending = deposits.filter(d => d.status === "pending");
+  const processed = deposits.filter(d => d.status !== "pending");
+
+  return (
+    <div className="space-y-4">
+      <h2 className="font-bold text-white">Solicitudes de Deposito ({deposits.length})</h2>
+      {pending.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs text-yellow-400 font-medium">Pendientes ({pending.length})</p>
+          {pending.map((dep) => (
+            <div key={dep.id} className="card-dark rounded-xl p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-white font-bold">${formatCOP(dep.amount)} COP</p>
+                  <p className="text-xs text-gray-500">@{dep.username} - {dep.method} - Ref: {dep.reference}</p>
+                  <p className="text-xs text-gray-600">{formatDate(dep.created_at)}</p>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => handleReview(dep.id, "approved")}
+                    className="flex items-center gap-1 px-3 py-1.5 text-xs bg-green-500/20 text-green-400 rounded-lg hover:bg-green-500/30">
+                    <CheckCircle2 size={14} /> Aprobar
+                  </button>
+                  <button onClick={() => handleReview(dep.id, "rejected")}
+                    className="flex items-center gap-1 px-3 py-1.5 text-xs bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30">
+                    <XCircle size={14} /> Rechazar
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {processed.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs text-gray-400 font-medium">Procesados ({processed.length})</p>
+          {processed.map((dep) => (
+            <div key={dep.id} className="card-dark rounded-lg p-3 flex items-center justify-between opacity-70">
+              <div>
+                <p className="text-sm text-white">${formatCOP(dep.amount)} COP - @{dep.username}</p>
+                <p className="text-xs text-gray-500">{dep.method} - {formatDate(dep.created_at)}</p>
+              </div>
+              <span className={`text-xs px-2 py-1 rounded-full ${dep.status === "approved" ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}>
+                {dep.status === "approved" ? "Aprobado" : "Rechazado"}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      {deposits.length === 0 && <p className="text-center text-gray-500 text-sm py-8">No hay solicitudes de deposito</p>}
+    </div>
+  );
+}
+
+/* === WITHDRAWALS === */
+function WithdrawalsPanel({ withdrawals, reload, showMsg }: {
+  withdrawals: WithdrawalReq[]; reload: () => void; showMsg: (m: string) => void;
+}) {
+  const formatCOP = (n: number) => n.toLocaleString("es-CO");
+  const formatDate = (d: string) => {
+    try { return new Date(d).toLocaleDateString("es-CO", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true }); }
+    catch { return d; }
+  };
+  const handleReview = async (id: number, status: string) => {
+    try {
+      await api.reviewWithdrawal(id, status);
+      showMsg(`Retiro ${status === "approved" ? "aprobado" : "rechazado"}`);
+      reload();
+    } catch (err) { showMsg(err instanceof Error ? err.message : "Error"); }
+  };
+  const pending = withdrawals.filter(w => w.status === "pending");
+  const processed = withdrawals.filter(w => w.status !== "pending");
+
+  return (
+    <div className="space-y-4">
+      <h2 className="font-bold text-white">Solicitudes de Retiro ({withdrawals.length})</h2>
+      {pending.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs text-yellow-400 font-medium">Pendientes ({pending.length})</p>
+          {pending.map((wd) => (
+            <div key={wd.id} className="card-dark rounded-xl p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-white font-bold">${formatCOP(wd.amount)} COP</p>
+                  <p className="text-xs text-gray-500">@{wd.username} - {wd.method} - Cuenta: {wd.account_number}</p>
+                  <p className="text-xs text-gray-600">{formatDate(wd.created_at)}</p>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => handleReview(wd.id, "approved")}
+                    className="flex items-center gap-1 px-3 py-1.5 text-xs bg-green-500/20 text-green-400 rounded-lg hover:bg-green-500/30">
+                    <CheckCircle2 size={14} /> Aprobar
+                  </button>
+                  <button onClick={() => handleReview(wd.id, "rejected")}
+                    className="flex items-center gap-1 px-3 py-1.5 text-xs bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30">
+                    <XCircle size={14} /> Rechazar
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {processed.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs text-gray-400 font-medium">Procesados ({processed.length})</p>
+          {processed.map((wd) => (
+            <div key={wd.id} className="card-dark rounded-lg p-3 flex items-center justify-between opacity-70">
+              <div>
+                <p className="text-sm text-white">${formatCOP(wd.amount)} COP - @{wd.username}</p>
+                <p className="text-xs text-gray-500">{wd.method} - {wd.account_number} - {formatDate(wd.created_at)}</p>
+              </div>
+              <span className={`text-xs px-2 py-1 rounded-full ${wd.status === "approved" ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}>
+                {wd.status === "approved" ? "Aprobado" : "Rechazado"}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      {withdrawals.length === 0 && <p className="text-center text-gray-500 text-sm py-8">No hay solicitudes de retiro</p>}
     </div>
   );
 }

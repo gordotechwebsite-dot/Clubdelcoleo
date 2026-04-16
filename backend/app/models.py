@@ -97,3 +97,41 @@ class InviteCodeCreate(BaseModel):
 class UserStatusUpdate(BaseModel):
     is_active: Optional[bool] = None
     is_admin: Optional[bool] = None
+
+
+# Withdrawal Models
+class WithdrawalRequest(BaseModel):
+    amount: float
+    method: str  # nequi, daviplata, bancolombia
+    account_number: str
+
+
+class WithdrawalReview(BaseModel):
+    status: str  # approved, rejected
+
+
+# Deposit Review Models
+class DepositReview(BaseModel):
+    status: str  # approved, rejected
+
+
+# Profile Models
+class ProfileUpdate(BaseModel):
+    full_name: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str
+
+
+# Winner Declaration
+class DeclareWinner(BaseModel):
+    player_id: int
+
+
+# Self Exclusion
+class SelfExclusion(BaseModel):
+    days: int  # number of days to self-exclude

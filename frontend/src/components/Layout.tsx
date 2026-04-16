@@ -1,15 +1,40 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { getUser, clearToken } from "../lib/api";
+import { getUser, clearToken, api } from "../lib/api";
 import {
-  Home, Calendar, Wallet, Trophy, Shield, Menu, X, LogOut, User,
+  Home, Calendar, Wallet, Trophy, Shield, Menu, X, LogOut, User, Bell,
 } from "lucide-react";
+
+interface Notification {
+  id: number; title: string; message: string; type: string; is_read: number; created_at: string;
+}
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [showNotifs, setShowNotifs] = useState(false);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
   const location = useLocation();
   const navigate = useNavigate();
   const user = getUser();
+
+  useEffect(() => {
+    const loadNotifs = () => {
+      api.getNotifications().then((data) => {
+        setNotifications(data.notifications || []);
+        setUnreadCount(data.unread_count || 0);
+      }).catch(() => {});
+    };
+    loadNotifs();
+    const interval = setInterval(loadNotifs, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleMarkRead = async () => {
+    await api.markNotificationsRead().catch(() => {});
+    setUnreadCount(0);
+    setNotifications(prev => prev.map(n => ({ ...n, is_read: 1 })));
+  };
 
   const handleLogout = () => {
     clearToken();
@@ -28,6 +53,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   }
 
   const isActive = (path: string) => location.pathname === path;
+
+  const formatNotifDate = (d: string) => {
+    try { return new Date(d).toLocaleDateString("es-CO", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true }); }
+    catch { return d; }
+  };
 
   return (
     <div className="min-h-screen bg-[#0a0a0a]">
@@ -66,12 +96,45 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                     ${user.balance?.toLocaleString("es-CO")} COP
                   </span>
                 </div>
-                <div className="flex items-center gap-1 text-gray-400">
+                <Link to="/profile" className="flex items-center gap-1 text-gray-400 hover:text-[#ffd700] transition">
                   <User size={14} />
                   <span>{user.full_name || user.username}</span>
-                </div>
+                </Link>
               </div>
             )}
+            {/* Notification Bell */}
+            <div className="relative">
+              <button onClick={() => { setShowNotifs(!showNotifs); if (!showNotifs && unreadCount > 0) handleMarkRead(); }}
+                className="relative text-gray-400 hover:text-[#ffd700] transition p-1">
+                <Bell size={20} />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                )}
+              </button>
+              {showNotifs && (
+                <div className="absolute right-0 top-full mt-2 w-80 bg-[#111] border border-gray-700 rounded-xl shadow-2xl z-50 overflow-hidden">
+                  <div className="p-3 border-b border-gray-800 flex items-center justify-between">
+                    <span className="text-sm font-bold text-white">Notificaciones</span>
+                    <button onClick={() => setShowNotifs(false)} className="text-gray-500 hover:text-white"><X size={16} /></button>
+                  </div>
+                  <div className="max-h-64 overflow-y-auto">
+                    {notifications.length === 0 ? (
+                      <p className="text-center text-gray-500 text-xs py-6">Sin notificaciones</p>
+                    ) : (
+                      notifications.slice(0, 10).map((n) => (
+                        <div key={n.id} className={`p-3 border-b border-gray-800/50 ${n.is_read ? "" : "bg-[#b8860b]/5"}`}>
+                          <p className="text-sm text-white font-medium">{n.title}</p>
+                          <p className="text-xs text-gray-400 mt-0.5">{n.message}</p>
+                          <p className="text-[10px] text-gray-600 mt-1">{formatNotifDate(n.created_at)}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
             <button
               onClick={handleLogout}
               className="hidden md:flex items-center gap-1 text-gray-400 hover:text-red-400 transition-colors text-sm"

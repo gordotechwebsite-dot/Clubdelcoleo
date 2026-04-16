@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { api, getUser, setUser } from "../lib/api";
-import { Calendar, MapPin, Clock, Trophy, Star, TrendingUp, ArrowLeft, CheckCircle2, X } from "lucide-react";
+import { Calendar, MapPin, Clock, Trophy, Star, TrendingUp, ArrowLeft, CheckCircle2, X, Search, ArrowUpDown, Crown } from "lucide-react";
 
 interface Player {
   id: number; name: string; nickname: string; team: string; odds: number;
@@ -10,6 +10,7 @@ interface Player {
 interface EventData {
   id: number; name: string; description: string; location: string;
   country: string; date: string; time: string; status: string; stream_url: string | null;
+  winner_player_id: number | null;
   players: Player[];
 }
 interface BetResult {
@@ -29,11 +30,37 @@ export default function EventDetailPage() {
   const [betting, setBetting] = useState(false);
   const [betResult, setBetResult] = useState<BetResult | null>(null);
   const [showConfirmation, setShowConfirmation] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState<"position" | "odds_asc" | "odds_desc" | "name" | "rating">("position");
   const user = getUser();
 
   useEffect(() => {
     if (id) api.getEvent(Number(id)).then(setEvent).catch(console.error).finally(() => setLoading(false));
   }, [id]);
+
+  const filteredPlayers = useMemo(() => {
+    if (!event) return [];
+    let players = [...event.players];
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      players = players.filter(p =>
+        p.name.toLowerCase().includes(q) || p.nickname.toLowerCase().includes(q) || p.team.toLowerCase().includes(q)
+      );
+    }
+    switch (sortBy) {
+      case "odds_asc": players.sort((a, b) => a.odds - b.odds); break;
+      case "odds_desc": players.sort((a, b) => b.odds - a.odds); break;
+      case "name": players.sort((a, b) => a.name.localeCompare(b.name)); break;
+      case "rating": players.sort((a, b) => b.rating - a.rating); break;
+      default: players.sort((a, b) => a.position - b.position);
+    }
+    return players;
+  }, [event, searchQuery, sortBy]);
+
+  const winnerPlayer = useMemo(() => {
+    if (!event || !event.winner_player_id) return null;
+    return event.players.find(p => p.id === event.winner_player_id) || null;
+  }, [event]);
 
   const formatDate = (d: string) => {
     const date = new Date(d + "T00:00:00");
@@ -206,13 +233,56 @@ export default function EventDetailPage() {
         </div>
       </div>
 
+      {/* Winner Banner */}
+      {event.status === "finished" && winnerPlayer && (
+        <div className="card-dark rounded-2xl overflow-hidden border-[#ffd700]/40">
+          <div className="gold-gradient p-4 text-center">
+            <Crown size={28} className="text-black mx-auto mb-1" />
+            <p className="text-black font-black text-lg">GANADOR DEL EVENTO</p>
+          </div>
+          <div className="p-4 text-center">
+            <p className="text-2xl font-black text-[#ffd700]">{winnerPlayer.name}</p>
+            <p className="text-sm text-gray-400">"{winnerPlayer.nickname}" - Cuota: {winnerPlayer.odds.toFixed(2)}x</p>
+          </div>
+        </div>
+      )}
+
+      {/* Search & Sort */}
+      <div className="flex flex-col sm:flex-row gap-2">
+        <div className="relative flex-1">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Buscar coleador por nombre o apodo..."
+            className="w-full bg-[#111] border border-gray-700 rounded-lg pl-9 pr-4 py-2.5 text-white text-sm focus:border-[#b8860b] focus:outline-none"
+          />
+        </div>
+        <div className="relative">
+          <ArrowUpDown size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+            className="w-full sm:w-auto bg-[#111] border border-gray-700 rounded-lg pl-8 pr-4 py-2.5 text-white text-sm focus:border-[#b8860b] focus:outline-none appearance-none cursor-pointer"
+          >
+            <option value="position">Posicion</option>
+            <option value="odds_asc">Cuota: Menor a Mayor</option>
+            <option value="odds_desc">Cuota: Mayor a Menor</option>
+            <option value="name">Nombre A-Z</option>
+            <option value="rating">Mejor Rating</option>
+          </select>
+        </div>
+      </div>
+
       {/* Players List - full width */}
       <div className="space-y-3">
         <h2 className="text-lg font-bold text-white flex items-center gap-2">
           <Trophy size={18} className="text-[#ffd700]" /> Coleadores Participantes
+          <span className="text-xs text-gray-500 font-normal ml-1">({filteredPlayers.length} de {event.players.length})</span>
         </h2>
         <div className="space-y-2">
-          {event.players.map((player) => (
+          {filteredPlayers.map((player) => (
             <button
               key={player.id}
               onClick={() => {

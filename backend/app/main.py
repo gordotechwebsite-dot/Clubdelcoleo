@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from app.database import get_db, init_db
 from app.auth import (
@@ -14,7 +14,10 @@ from app.models import (
     EventCreate, EventUpdate,
     PlayerCreate, PlayerUpdate,
     EventPlayerAdd, BetCreate, DepositRequest,
-    InviteCodeCreate, UserStatusUpdate
+    InviteCodeCreate, UserStatusUpdate,
+    WithdrawalRequest, WithdrawalReview,
+    DepositReview, ProfileUpdate, PasswordChange,
+    DeclareWinner, SelfExclusion
 )
 
 app = FastAPI(title="Club del Coleo API", version="1.0.0")
@@ -301,6 +304,15 @@ async def place_bet(bet: BetCreate, user=Depends(get_current_user)):
     if bet.amount < 1000:
         raise HTTPException(status_code=400, detail="Apuesta minima: $1,000 COP")
 
+    # Check self-exclusion
+    if user.get("self_excluded_until"):
+        try:
+            excluded = datetime.fromisoformat(user["self_excluded_until"])
+            if datetime.now(timezone.utc) < excluded:
+                raise HTTPException(status_code=403, detail="Tu cuenta esta en periodo de auto-exclusion. No puedes apostar en este momento.")
+        except (ValueError, TypeError):
+            pass
+
     with get_db() as conn:
         event = conn.execute(
             "SELECT * FROM events WHERE id = ? AND status = 'upcoming'",
@@ -308,6 +320,11 @@ async def place_bet(bet: BetCreate, user=Depends(get_current_user)):
         ).fetchone()
         if not event:
             raise HTTPException(status_code=400, detail="Evento no disponible para apuestas")
+
+        # Check event max bet amount
+        max_bet = event.get("max_bet_amount") or 500000
+        if bet.amount > max_bet:
+            raise HTTPException(status_code=400, detail=f"Apuesta maxima para este evento: ${int(max_bet):,} COP")
 
         ep = conn.execute(
             "SELECT odds FROM event_players WHERE event_id = ? AND player_id = ?",
@@ -426,27 +443,121 @@ async def deposit(req: DepositRequest, user=Depends(get_current_user)):
         raise HTTPException(status_code=400, detail="Metodo de pago no valido")
 
     with get_db() as conn:
-        conn.execute(
-            "UPDATE users SET balance = balance + ? WHERE id = ?",
-            (req.amount, user["id"])
+        # Check daily deposit limit
+        daily_limit = user.get("daily_deposit_limit", 2000000) or 2000000
+        today_deposits = conn.execute(
+            """SELECT COALESCE(SUM(amount), 0) as total FROM deposit_requests
+               WHERE user_id = ? AND status = 'approved'
+               AND date(created_at) = date('now')""",
+            (user["id"],)
+        ).fetchone()["total"]
+        if today_deposits + req.amount > daily_limit:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Limite diario de deposito excedido. Limite: ${int(daily_limit):,} COP. Ya depositado hoy: ${int(today_deposits):,} COP"
+            )
+
+        # Create pending deposit request
+        cursor = conn.execute(
+            """INSERT INTO deposit_requests (user_id, amount, method, reference)
+               VALUES (?, ?, ?, ?)""",
+            (user["id"], req.amount, req.method, req.reference)
         )
-        method_names = {"nequi": "Nequi", "daviplata": "Daviplata", "bancolombia": "Bancolombia"}
+
+        # Create notification for admin
         conn.execute(
-            """INSERT INTO transactions (user_id, type, amount, method, reference, description)
-               VALUES (?, 'deposit', ?, ?, ?, ?)""",
-            (user["id"], req.amount, req.method, req.reference,
-             f"Recarga via {method_names.get(req.method, req.method)}")
+            """INSERT INTO notifications (user_id, title, message, type)
+               SELECT id, 'Nueva solicitud de deposito',
+               ?, 'deposit'
+               FROM users WHERE is_admin = 1""",
+            (f"Solicitud de ${int(req.amount):,} COP via {req.method} de {user['username']}",)
         )
-        new_balance = conn.execute(
-            "SELECT balance FROM users WHERE id = ?", (user["id"],)
-        ).fetchone()
 
         return {
-            "message": "Recarga exitosa",
-            "new_balance": new_balance["balance"],
+            "message": "Solicitud de recarga enviada. Pendiente de aprobacion por el administrador.",
+            "request_id": cursor.lastrowid,
             "amount": req.amount,
             "method": req.method,
+            "status": "pending",
         }
+
+
+@app.get("/api/wallet/deposits")
+async def get_my_deposits(user=Depends(get_current_user)):
+    with get_db() as conn:
+        deposits = conn.execute(
+            """SELECT * FROM deposit_requests WHERE user_id = ?
+               ORDER BY created_at DESC LIMIT 20""",
+            (user["id"],)
+        ).fetchall()
+        return [dict(d) for d in deposits]
+
+
+# ==================== WITHDRAWALS ====================
+
+@app.post("/api/wallet/withdraw")
+async def request_withdrawal(req: WithdrawalRequest, user=Depends(get_current_user)):
+    if req.amount <= 0:
+        raise HTTPException(status_code=400, detail="Monto debe ser mayor a 0")
+    if req.amount < 10000:
+        raise HTTPException(status_code=400, detail="Retiro minimo: $10,000 COP")
+    if req.method not in ["nequi", "daviplata", "bancolombia"]:
+        raise HTTPException(status_code=400, detail="Metodo de pago no valido")
+    if not req.account_number.strip():
+        raise HTTPException(status_code=400, detail="Numero de cuenta requerido")
+
+    with get_db() as conn:
+        current = conn.execute(
+            "SELECT balance FROM users WHERE id = ?", (user["id"],)
+        ).fetchone()
+        if current["balance"] < req.amount:
+            raise HTTPException(status_code=400, detail="Saldo insuficiente")
+
+        # Check pending withdrawals
+        pending = conn.execute(
+            """SELECT COALESCE(SUM(amount), 0) as total FROM withdrawal_requests
+               WHERE user_id = ? AND status = 'pending'""",
+            (user["id"],)
+        ).fetchone()["total"]
+        available = current["balance"] - pending
+        if available < req.amount:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Saldo disponible insuficiente. Tienes ${int(pending):,} COP en retiros pendientes."
+            )
+
+        cursor = conn.execute(
+            """INSERT INTO withdrawal_requests (user_id, amount, method, account_number)
+               VALUES (?, ?, ?, ?)""",
+            (user["id"], req.amount, req.method, req.account_number.strip())
+        )
+
+        # Notify admin
+        conn.execute(
+            """INSERT INTO notifications (user_id, title, message, type)
+               SELECT id, 'Nueva solicitud de retiro',
+               ?, 'withdrawal'
+               FROM users WHERE is_admin = 1""",
+            (f"Solicitud de retiro ${int(req.amount):,} COP via {req.method} de {user['username']}",)
+        )
+
+        return {
+            "message": "Solicitud de retiro enviada. Pendiente de aprobacion.",
+            "request_id": cursor.lastrowid,
+            "amount": req.amount,
+            "status": "pending",
+        }
+
+
+@app.get("/api/wallet/withdrawals")
+async def get_my_withdrawals(user=Depends(get_current_user)):
+    with get_db() as conn:
+        withdrawals = conn.execute(
+            """SELECT * FROM withdrawal_requests WHERE user_id = ?
+               ORDER BY created_at DESC LIMIT 20""",
+            (user["id"],)
+        ).fetchall()
+        return [dict(w) for w in withdrawals]
 
 
 # ==================== ADMIN ====================
@@ -524,6 +635,8 @@ async def admin_stats(user=Depends(get_admin_user)):
         total_bet_amount = conn.execute("SELECT COALESCE(SUM(amount), 0) as total FROM bets").fetchone()["total"]
         pending_bets = conn.execute("SELECT COUNT(*) as count FROM bets WHERE status = 'pending'").fetchone()["count"]
         active_events = conn.execute("SELECT COUNT(*) as count FROM events WHERE status = 'upcoming'").fetchone()["count"]
+        pending_deposits = conn.execute("SELECT COUNT(*) as count FROM deposit_requests WHERE status = 'pending'").fetchone()["count"]
+        pending_withdrawals = conn.execute("SELECT COUNT(*) as count FROM withdrawal_requests WHERE status = 'pending'").fetchone()["count"]
 
         return {
             "total_users": total_users,
@@ -532,7 +645,304 @@ async def admin_stats(user=Depends(get_admin_user)):
             "total_bet_amount": total_bet_amount,
             "pending_bets": pending_bets,
             "active_events": active_events,
+            "pending_deposits": pending_deposits,
+            "pending_withdrawals": pending_withdrawals,
         }
+
+
+# ==================== PROFILE ====================
+
+@app.put("/api/auth/profile")
+async def update_profile(data: ProfileUpdate, user=Depends(get_current_user)):
+    with get_db() as conn:
+        updates = {k: v for k, v in data.model_dump().items() if v is not None}
+        if not updates:
+            return {"message": "Nada que actualizar"}
+        if "email" in updates:
+            existing = conn.execute(
+                "SELECT id FROM users WHERE email = ? AND id != ?",
+                (updates["email"], user["id"])
+            ).fetchone()
+            if existing:
+                raise HTTPException(status_code=400, detail="Email ya esta en uso")
+        set_clause = ", ".join(f"{k} = ?" for k in updates.keys())
+        values = list(updates.values()) + [user["id"]]
+        conn.execute(f"UPDATE users SET {set_clause} WHERE id = ?", values)
+        return {"message": "Perfil actualizado exitosamente"}
+
+
+@app.put("/api/auth/password")
+async def change_password(data: PasswordChange, user=Depends(get_current_user)):
+    from app.auth import verify_password, hash_password
+    if not verify_password(data.current_password, user["password_hash"]):
+        raise HTTPException(status_code=400, detail="Contrasena actual incorrecta")
+    if len(data.new_password) < 6:
+        raise HTTPException(status_code=400, detail="La nueva contrasena debe tener al menos 6 caracteres")
+    with get_db() as conn:
+        new_hash = hash_password(data.new_password)
+        conn.execute("UPDATE users SET password_hash = ? WHERE id = ?", (new_hash, user["id"]))
+        return {"message": "Contrasena actualizada exitosamente"}
+
+
+@app.get("/api/auth/profile/stats")
+async def get_profile_stats(user=Depends(get_current_user)):
+    with get_db() as conn:
+        total_bets = conn.execute("SELECT COUNT(*) as c FROM bets WHERE user_id = ?", (user["id"],)).fetchone()["c"]
+        total_bet_amount = conn.execute("SELECT COALESCE(SUM(amount), 0) as t FROM bets WHERE user_id = ?", (user["id"],)).fetchone()["t"]
+        won_bets = conn.execute("SELECT COUNT(*) as c FROM bets WHERE user_id = ? AND status = 'won'", (user["id"],)).fetchone()["c"]
+        lost_bets = conn.execute("SELECT COUNT(*) as c FROM bets WHERE user_id = ? AND status = 'lost'", (user["id"],)).fetchone()["c"]
+        total_won = conn.execute("SELECT COALESCE(SUM(potential_win), 0) as t FROM bets WHERE user_id = ? AND status = 'won'", (user["id"],)).fetchone()["t"]
+        return {
+            "total_bets": total_bets,
+            "total_bet_amount": total_bet_amount,
+            "won_bets": won_bets,
+            "lost_bets": lost_bets,
+            "total_won": total_won,
+            "win_rate": round(won_bets / total_bets * 100, 1) if total_bets > 0 else 0,
+        }
+
+
+# ==================== SELF EXCLUSION ====================
+
+@app.post("/api/auth/self-exclude")
+async def self_exclude(data: SelfExclusion, user=Depends(get_current_user)):
+    if data.days < 1 or data.days > 365:
+        raise HTTPException(status_code=400, detail="Periodo de exclusion: 1-365 dias")
+    with get_db() as conn:
+        exclude_until = (datetime.now(timezone.utc) + timedelta(days=data.days)).isoformat()
+        conn.execute("UPDATE users SET self_excluded_until = ? WHERE id = ?", (exclude_until, user["id"]))
+        return {"message": f"Te has auto-excluido por {data.days} dias", "excluded_until": exclude_until}
+
+
+# ==================== NOTIFICATIONS ====================
+
+@app.get("/api/notifications")
+async def get_notifications(user=Depends(get_current_user)):
+    with get_db() as conn:
+        notifications = conn.execute(
+            """SELECT * FROM notifications WHERE user_id = ?
+               ORDER BY created_at DESC LIMIT 30""",
+            (user["id"],)
+        ).fetchall()
+        unread = conn.execute(
+            "SELECT COUNT(*) as c FROM notifications WHERE user_id = ? AND is_read = 0",
+            (user["id"],)
+        ).fetchone()["c"]
+        return {"notifications": [dict(n) for n in notifications], "unread_count": unread}
+
+
+@app.put("/api/notifications/read")
+async def mark_notifications_read(user=Depends(get_current_user)):
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE notifications SET is_read = 1 WHERE user_id = ? AND is_read = 0",
+            (user["id"],)
+        )
+        return {"message": "Notificaciones marcadas como leidas"}
+
+
+@app.put("/api/notifications/{notif_id}/read")
+async def mark_one_read(notif_id: int, user=Depends(get_current_user)):
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?",
+            (notif_id, user["id"])
+        )
+        return {"message": "ok"}
+
+
+# ==================== DECLARE WINNER ====================
+
+@app.post("/api/events/{event_id}/winner")
+async def declare_winner(event_id: int, data: DeclareWinner, user=Depends(get_admin_user)):
+    with get_db() as conn:
+        event = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
+        if not event:
+            raise HTTPException(status_code=404, detail="Evento no encontrado")
+
+        ep = conn.execute(
+            "SELECT * FROM event_players WHERE event_id = ? AND player_id = ?",
+            (event_id, data.player_id)
+        ).fetchone()
+        if not ep:
+            raise HTTPException(status_code=400, detail="Jugador no participa en este evento")
+
+        player = conn.execute("SELECT name FROM players WHERE id = ?", (data.player_id,)).fetchone()
+
+        # Update event
+        conn.execute(
+            "UPDATE events SET status = 'finished', winner_player_id = ? WHERE id = ?",
+            (data.player_id, event_id)
+        )
+
+        # Update player stats
+        conn.execute("UPDATE players SET stats_wins = stats_wins + 1 WHERE id = ?", (data.player_id,))
+        losing_players = conn.execute(
+            "SELECT player_id FROM event_players WHERE event_id = ? AND player_id != ?",
+            (event_id, data.player_id)
+        ).fetchall()
+        for lp in losing_players:
+            conn.execute("UPDATE players SET stats_losses = stats_losses + 1 WHERE id = ?", (lp["player_id"],))
+
+        # Process bets - winners
+        winning_bets = conn.execute(
+            "SELECT * FROM bets WHERE event_id = ? AND player_id = ? AND status = 'pending'",
+            (event_id, data.player_id)
+        ).fetchall()
+        for bet in winning_bets:
+            conn.execute("UPDATE bets SET status = 'won', resolved_at = ? WHERE id = ?",
+                         (datetime.now(timezone.utc).isoformat(), bet["id"]))
+            conn.execute("UPDATE users SET balance = balance + ? WHERE id = ?",
+                         (bet["potential_win"], bet["user_id"]))
+            conn.execute(
+                """INSERT INTO transactions (user_id, type, amount, method, description)
+                   VALUES (?, 'winning', ?, 'saldo', ?)""",
+                (bet["user_id"], bet["potential_win"],
+                 f"Ganancia en {event['name']} - {player['name']}")
+            )
+            conn.execute(
+                """INSERT INTO notifications (user_id, title, message, type)
+                   VALUES (?, ?, ?, 'win')""",
+                (bet["user_id"], "Apuesta ganada!",
+                 f"Tu apuesta en {event['name']} gano! Ganaste ${int(bet['potential_win']):,} COP")
+            )
+
+        # Process bets - losers
+        losing_bets = conn.execute(
+            "SELECT * FROM bets WHERE event_id = ? AND player_id != ? AND status = 'pending'",
+            (event_id, data.player_id)
+        ).fetchall()
+        for bet in losing_bets:
+            conn.execute("UPDATE bets SET status = 'lost', resolved_at = ? WHERE id = ?",
+                         (datetime.now(timezone.utc).isoformat(), bet["id"]))
+            conn.execute(
+                """INSERT INTO notifications (user_id, title, message, type)
+                   VALUES (?, ?, ?, 'loss')""",
+                (bet["user_id"], "Apuesta perdida",
+                 f"Tu apuesta en {event['name']} no gano. El ganador fue {player['name']}.")
+            )
+
+        return {
+            "message": f"Ganador declarado: {player['name']}",
+            "winning_bets": len(winning_bets),
+            "losing_bets": len(losing_bets),
+        }
+
+
+# ==================== ADMIN DEPOSITS & WITHDRAWALS ====================
+
+@app.get("/api/admin/deposits")
+async def list_deposits(user=Depends(get_admin_user)):
+    with get_db() as conn:
+        deposits = conn.execute(
+            """SELECT dr.*, u.username, u.full_name
+               FROM deposit_requests dr
+               JOIN users u ON dr.user_id = u.id
+               ORDER BY dr.created_at DESC"""
+        ).fetchall()
+        return [dict(d) for d in deposits]
+
+
+@app.put("/api/admin/deposits/{dep_id}")
+async def review_deposit(dep_id: int, data: DepositReview, user=Depends(get_admin_user)):
+    if data.status not in ["approved", "rejected"]:
+        raise HTTPException(status_code=400, detail="Estado invalido")
+    with get_db() as conn:
+        dep = conn.execute("SELECT * FROM deposit_requests WHERE id = ?", (dep_id,)).fetchone()
+        if not dep:
+            raise HTTPException(status_code=404, detail="Solicitud no encontrada")
+        if dep["status"] != "pending":
+            raise HTTPException(status_code=400, detail="Solicitud ya fue procesada")
+
+        conn.execute(
+            "UPDATE deposit_requests SET status = ?, reviewed_by = ?, reviewed_at = ? WHERE id = ?",
+            (data.status, user["id"], datetime.now(timezone.utc).isoformat(), dep_id)
+        )
+
+        method_names = {"nequi": "Nequi", "daviplata": "Daviplata", "bancolombia": "Bancolombia"}
+        if data.status == "approved":
+            conn.execute(
+                "UPDATE users SET balance = balance + ? WHERE id = ?",
+                (dep["amount"], dep["user_id"])
+            )
+            conn.execute(
+                """INSERT INTO transactions (user_id, type, amount, method, reference, description)
+                   VALUES (?, 'deposit', ?, ?, ?, ?)""",
+                (dep["user_id"], dep["amount"], dep["method"], dep["reference"],
+                 f"Recarga via {method_names.get(dep['method'], dep['method'])}")
+            )
+            conn.execute(
+                """INSERT INTO notifications (user_id, title, message, type)
+                   VALUES (?, ?, ?, 'deposit')""",
+                (dep["user_id"], "Deposito aprobado",
+                 f"Tu deposito de ${int(dep['amount']):,} COP via {method_names.get(dep['method'], dep['method'])} ha sido aprobado.")
+            )
+        else:
+            conn.execute(
+                """INSERT INTO notifications (user_id, title, message, type)
+                   VALUES (?, ?, ?, 'deposit')""",
+                (dep["user_id"], "Deposito rechazado",
+                 f"Tu solicitud de deposito de ${int(dep['amount']):,} COP fue rechazada. Contacta soporte para mas informacion.")
+            )
+
+        return {"message": f"Deposito {data.status}"}
+
+
+@app.get("/api/admin/withdrawals")
+async def list_withdrawals(user=Depends(get_admin_user)):
+    with get_db() as conn:
+        withdrawals = conn.execute(
+            """SELECT wr.*, u.username, u.full_name
+               FROM withdrawal_requests wr
+               JOIN users u ON wr.user_id = u.id
+               ORDER BY wr.created_at DESC"""
+        ).fetchall()
+        return [dict(w) for w in withdrawals]
+
+
+@app.put("/api/admin/withdrawals/{wd_id}")
+async def review_withdrawal(wd_id: int, data: WithdrawalReview, user=Depends(get_admin_user)):
+    if data.status not in ["approved", "rejected"]:
+        raise HTTPException(status_code=400, detail="Estado invalido")
+    with get_db() as conn:
+        wd = conn.execute("SELECT * FROM withdrawal_requests WHERE id = ?", (wd_id,)).fetchone()
+        if not wd:
+            raise HTTPException(status_code=404, detail="Solicitud no encontrada")
+        if wd["status"] != "pending":
+            raise HTTPException(status_code=400, detail="Solicitud ya fue procesada")
+
+        conn.execute(
+            "UPDATE withdrawal_requests SET status = ?, reviewed_by = ?, reviewed_at = ? WHERE id = ?",
+            (data.status, user["id"], datetime.now(timezone.utc).isoformat(), wd_id)
+        )
+
+        method_names = {"nequi": "Nequi", "daviplata": "Daviplata", "bancolombia": "Bancolombia"}
+        if data.status == "approved":
+            conn.execute(
+                "UPDATE users SET balance = balance - ? WHERE id = ?",
+                (wd["amount"], wd["user_id"])
+            )
+            conn.execute(
+                """INSERT INTO transactions (user_id, type, amount, method, description)
+                   VALUES (?, 'withdrawal', ?, ?, ?)""",
+                (wd["user_id"], -wd["amount"], wd["method"],
+                 f"Retiro via {method_names.get(wd['method'], wd['method'])} a {wd['account_number']}")
+            )
+            conn.execute(
+                """INSERT INTO notifications (user_id, title, message, type)
+                   VALUES (?, ?, ?, 'withdrawal')""",
+                (wd["user_id"], "Retiro aprobado",
+                 f"Tu retiro de ${int(wd['amount']):,} COP a {wd['account_number']} ha sido aprobado.")
+            )
+        else:
+            conn.execute(
+                """INSERT INTO notifications (user_id, title, message, type)
+                   VALUES (?, ?, ?, 'withdrawal')""",
+                (wd["user_id"], "Retiro rechazado",
+                 f"Tu solicitud de retiro de ${int(wd['amount']):,} COP fue rechazada.")
+            )
+
+        return {"message": f"Retiro {data.status}"}
 
 
 # ==================== SEED DATA ====================

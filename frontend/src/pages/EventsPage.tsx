@@ -94,7 +94,25 @@ export default function EventsPage() {
       </div>
 
       {loading ? (
-        <div className="text-center py-16 text-gray-500">Cargando eventos...</div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[1,2,3,4,5,6].map(i => (
+            <div key={i} className="card-dark rounded-xl overflow-hidden">
+              <div className="h-1.5 skeleton" />
+              <div className="p-5 space-y-3">
+                <div className="flex items-center gap-2">
+                  <div className="skeleton h-5 w-10" />
+                  <div className="skeleton h-5 w-3/4" />
+                </div>
+                <div className="skeleton h-4 w-full" />
+                <div className="space-y-1">
+                  <div className="skeleton h-3.5 w-2/3" />
+                  <div className="skeleton h-3.5 w-1/3" />
+                  <div className="skeleton h-3.5 w-1/2" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
       ) : filtered.length === 0 ? (
         <div className="card-dark rounded-xl p-12 text-center text-gray-500">
           No se encontraron eventos
@@ -119,7 +137,7 @@ export default function EventsPage() {
                     {event.status === "upcoming" ? "ABIERTO" : event.status === "live" ? "EN VIVO" : "FINALIZADO"}
                   </span>
                 </div>
-                <p className="text-gray-500 text-xs line-clamp-2">{event.description}</p>
+                <p className="text-gray-400 text-xs line-clamp-2">{event.description}</p>
                 <div className="space-y-1 text-xs text-gray-400">
                   <div className="flex items-center gap-2">
                     <Calendar size={13} className="text-[#b8860b]" />

@@ -1,4 +1,5 @@
-import { Calendar, MapPin, Clock, Trophy, Shield, Hash } from "lucide-react";
+import { useRef, useState } from "react";
+import { Calendar, MapPin, Clock, Trophy, Shield, Hash, Share2, Download } from "lucide-react";
 
 interface BetData {
   ticket_code: string; event_name: string; event_date: string; event_time: string;
@@ -7,6 +8,8 @@ interface BetData {
 }
 
 export default function BetTicket({ bet }: { bet: BetData }) {
+  const ticketRef = useRef<HTMLDivElement>(null);
+  const [sharing, setSharing] = useState(false);
   const formatDate = (d: string) => {
     try {
       const date = new Date(d.includes("T") ? d : d + "T00:00:00");
@@ -35,7 +38,7 @@ export default function BetTicket({ bet }: { bet: BetData }) {
   return (
     <div className="max-w-md mx-auto">
       {/* Ticket */}
-      <div className="bg-gradient-to-b from-[#1a1708] to-[#0f0f0f] border border-[#b8860b]/40 rounded-2xl overflow-hidden shadow-2xl shadow-[#b8860b]/10">
+      <div ref={ticketRef} className="bg-gradient-to-b from-[#1a1708] to-[#0f0f0f] border border-[#b8860b]/40 rounded-2xl overflow-hidden shadow-2xl shadow-[#b8860b]/10">
         {/* Header */}
         <div className="gold-gradient p-4 text-center relative">
           <div className="absolute top-2 left-3 text-black/30 text-xs font-mono">CDC</div>
@@ -133,6 +136,38 @@ export default function BetTicket({ bet }: { bet: BetData }) {
           )}
           <p className="text-xs text-gray-700">clubdelcoleo.com | +18</p>
         </div>
+      </div>
+
+      {/* Share / Download Buttons */}
+      <div className="flex gap-2 mt-3">
+        <button
+          onClick={async () => {
+            if (!ticketRef.current) return;
+            setSharing(true);
+            try {
+              const html2canvas = (await import("html2canvas")).default;
+              const canvas = await html2canvas(ticketRef.current, { backgroundColor: "#0a0a0a", scale: 2 });
+              const link = document.createElement("a");
+              link.download = `talon-${bet.ticket_code}.png`;
+              link.href = canvas.toDataURL("image/png");
+              link.click();
+            } catch (err) { console.error(err); }
+            setSharing(false);
+          }}
+          disabled={sharing}
+          className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-gray-400 hover:text-white hover:border-[#b8860b] transition text-xs font-medium disabled:opacity-50"
+        >
+          <Download size={14} /> {sharing ? "Generando..." : "Descargar"}
+        </button>
+        <button
+          onClick={() => {
+            const text = `Club del Coleo - Talon de Apuesta\nTicket: ${bet.ticket_code}\nEvento: ${bet.event_name}\nJugador: ${bet.player_name}\nMonto: $${bet.amount.toLocaleString("es-CO")} COP\nCuota: ${bet.odds.toFixed(2)}x\nGanancia potencial: $${bet.potential_win.toLocaleString("es-CO")} COP`;
+            window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
+          }}
+          className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-green-600/20 border border-green-600/40 rounded-lg text-green-400 hover:bg-green-600/30 transition text-xs font-medium"
+        >
+          <Share2 size={14} /> Compartir
+        </button>
       </div>
     </div>
   );

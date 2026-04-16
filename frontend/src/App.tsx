@@ -11,6 +11,7 @@ import EventDetailPage from "./pages/EventDetailPage";
 import WalletPage from "./pages/WalletPage";
 import MyBetsPage from "./pages/MyBetsPage";
 import AdminPage from "./pages/AdminPage";
+import ProfilePage from "./pages/ProfilePage";
 
 function PublicRoute({ children }: { children: React.ReactNode }) {
   const user = getUser();
@@ -43,6 +44,7 @@ export default function App() {
         <Route path="/events/:id" element={<ProtectedRoute><EventDetailPage /></ProtectedRoute>} />
         <Route path="/wallet" element={<ProtectedRoute><WalletPage /></ProtectedRoute>} />
         <Route path="/my-bets" element={<ProtectedRoute><MyBetsPage /></ProtectedRoute>} />
+        <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
         <Route path="/admin" element={<AdminRoute><AdminPage /></AdminRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

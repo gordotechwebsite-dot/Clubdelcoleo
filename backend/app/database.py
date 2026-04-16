@@ -111,7 +111,55 @@ def init_db():
                 status TEXT DEFAULT 'completed',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
+
+            CREATE TABLE IF NOT EXISTS deposit_requests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER REFERENCES users(id),
+                amount REAL NOT NULL,
+                method TEXT NOT NULL,
+                reference TEXT NOT NULL,
+                status TEXT DEFAULT 'pending',
+                reviewed_by INTEGER REFERENCES users(id),
+                reviewed_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS withdrawal_requests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER REFERENCES users(id),
+                amount REAL NOT NULL,
+                method TEXT NOT NULL,
+                account_number TEXT NOT NULL,
+                status TEXT DEFAULT 'pending',
+                reviewed_by INTEGER REFERENCES users(id),
+                reviewed_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS notifications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER REFERENCES users(id),
+                title TEXT NOT NULL,
+                message TEXT NOT NULL,
+                type TEXT DEFAULT 'info',
+                is_read INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
         """)
+
+        # Migrate: add winner_player_id to events if missing
+        cols = [row[1] for row in conn.execute("PRAGMA table_info(events)").fetchall()]
+        if "winner_player_id" not in cols:
+            conn.execute("ALTER TABLE events ADD COLUMN winner_player_id INTEGER REFERENCES players(id)")
+        if "max_bet_amount" not in cols:
+            conn.execute("ALTER TABLE events ADD COLUMN max_bet_amount REAL DEFAULT 500000")
+
+        # Migrate: add daily_deposit_limit and max_single_bet to users if missing
+        user_cols = [row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()]
+        if "daily_deposit_limit" not in user_cols:
+            conn.execute("ALTER TABLE users ADD COLUMN daily_deposit_limit REAL DEFAULT 2000000")
+        if "self_excluded_until" not in user_cols:
+            conn.execute("ALTER TABLE users ADD COLUMN self_excluded_until TIMESTAMP")
 
         # Create default admin if not exists
         import bcrypt as _bcrypt

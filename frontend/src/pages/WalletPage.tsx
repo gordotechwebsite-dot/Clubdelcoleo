@@ -1,10 +1,16 @@
 import { useEffect, useState } from "react";
-import { api, setUser } from "../lib/api";
-import { Wallet, ArrowUpCircle, ArrowDownCircle, Clock, CreditCard, Smartphone, Building2 } from "lucide-react";
+import { api } from "../lib/api";
+import { Wallet, ArrowUpCircle, ArrowDownCircle, Clock, CreditCard, Smartphone, Building2, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
 
 interface Transaction {
   id: number; type: string; amount: number; method: string; reference: string;
   description: string; status: string; created_at: string;
+}
+interface DepositRequest {
+  id: number; amount: number; method: string; reference: string; status: string; created_at: string;
+}
+interface WithdrawalRequest {
+  id: number; amount: number; method: string; account_number: string; status: string; created_at: string;
 }
 
 const METHODS = [
@@ -13,23 +19,36 @@ const METHODS = [
   { key: "bancolombia", label: "Bancolombia", icon: Building2, color: "text-yellow-400", bg: "bg-yellow-500/10", border: "border-yellow-500/30", number: "Cuenta: 000-000000-00" },
 ];
 
+type WalletTab = "depositar" | "retirar" | "solicitudes" | "historial";
+
 export default function WalletPage() {
   const [balance, setBalance] = useState(0);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [deposits, setDeposits] = useState<DepositRequest[]>([]);
+  const [withdrawals, setWithdrawals] = useState<WithdrawalRequest[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showDeposit, setShowDeposit] = useState(false);
+  const [activeTab, setActiveTab] = useState<WalletTab>("depositar");
   const [method, setMethod] = useState("");
   const [amount, setAmount] = useState("");
   const [reference, setReference] = useState("");
   const [depositing, setDepositing] = useState(false);
+  const [wMethod, setWMethod] = useState("");
+  const [wAmount, setWAmount] = useState("");
+  const [wAccount, setWAccount] = useState("");
+  const [withdrawing, setWithdrawing] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  const loadWallet = () => {
-    api.getWallet().then((data) => {
-      setBalance(data.balance);
-      setTransactions(data.transactions);
-    }).catch(console.error).finally(() => setLoading(false));
+  const loadWallet = async () => {
+    try {
+      const [walletData, depData, wdData] = await Promise.all([
+        api.getWallet(), api.getMyDeposits(), api.getMyWithdrawals(),
+      ]);
+      setBalance(walletData.balance);
+      setTransactions(walletData.transactions);
+      setDeposits(depData);
+      setWithdrawals(wdData);
+    } catch (err) { console.error(err); } finally { setLoading(false); }
   };
 
   useEffect(() => { loadWallet(); }, []);
@@ -39,25 +58,30 @@ export default function WalletPage() {
     if (!method) { setError("Selecciona un metodo de pago"); return; }
     if (isNaN(amt) || amt < 5000) { setError("Deposito minimo: $5,000 COP"); return; }
     if (!reference.trim()) { setError("Ingresa el numero de referencia"); return; }
-    setError("");
-    setDepositing(true);
+    setError(""); setDepositing(true);
     try {
-      const res = await api.deposit({ amount: amt, method, reference: reference.trim() });
-      setBalance(res.new_balance);
-      setSuccess(`Recarga de $${amt.toLocaleString("es-CO")} COP exitosa!`);
-      setAmount("");
-      setReference("");
-      setMethod("");
-      setShowDeposit(false);
-      const me = await api.getMe();
-      setUser(me);
+      await api.deposit({ amount: amt, method, reference: reference.trim() });
+      setSuccess("Solicitud de recarga enviada. Pendiente de aprobacion.");
+      setAmount(""); setReference(""); setMethod(""); setActiveTab("solicitudes");
       loadWallet();
-      setTimeout(() => setSuccess(""), 4000);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error en la recarga");
-    } finally {
-      setDepositing(false);
-    }
+      setTimeout(() => setSuccess(""), 6000);
+    } catch (err) { setError(err instanceof Error ? err.message : "Error en la recarga"); } finally { setDepositing(false); }
+  };
+
+  const handleWithdraw = async () => {
+    const amt = parseFloat(wAmount);
+    if (!wMethod) { setError("Selecciona un metodo de retiro"); return; }
+    if (isNaN(amt) || amt < 10000) { setError("Retiro minimo: $10,000 COP"); return; }
+    if (!wAccount.trim()) { setError("Ingresa tu numero de cuenta"); return; }
+    if (amt > balance) { setError("Saldo insuficiente"); return; }
+    setError(""); setWithdrawing(true);
+    try {
+      await api.withdraw({ amount: amt, method: wMethod, account_number: wAccount.trim() });
+      setSuccess("Solicitud de retiro enviada. Pendiente de aprobacion.");
+      setWAmount(""); setWAccount(""); setWMethod(""); setActiveTab("solicitudes");
+      loadWallet();
+      setTimeout(() => setSuccess(""), 6000);
+    } catch (err) { setError(err instanceof Error ? err.message : "Error en el retiro"); } finally { setWithdrawing(false); }
   };
 
   const formatDate = (d: string) => {
@@ -65,17 +89,36 @@ export default function WalletPage() {
     catch { return d; }
   };
 
-  if (loading) return <div className="text-center py-16 text-gray-500">Cargando billetera...</div>;
+  const statusBadge = (status: string) => {
+    if (status === "pending") return <span className="flex items-center gap-1 text-xs text-yellow-400"><AlertCircle size={12} /> Pendiente</span>;
+    if (status === "approved") return <span className="flex items-center gap-1 text-xs text-green-400"><CheckCircle2 size={12} /> Aprobado</span>;
+    if (status === "rejected") return <span className="flex items-center gap-1 text-xs text-red-400"><XCircle size={12} /> Rechazado</span>;
+    return <span className="text-xs text-gray-400">{status}</span>;
+  };
+
+  const methodLabel = (m: string) => METHODS.find(x => x.key === m)?.label || m;
+
+  if (loading) return (
+    <div className="max-w-2xl mx-auto space-y-4 pb-20 md:pb-0">
+      <div className="h-8 bg-gray-800/50 rounded w-48 animate-pulse" />
+      <div className="card-dark rounded-2xl overflow-hidden">
+        <div className="h-1.5 bg-gray-700" />
+        <div className="p-6 space-y-3">
+          <div className="h-8 bg-gray-800/50 rounded w-8 mx-auto animate-pulse" />
+          <div className="h-4 bg-gray-800/50 rounded w-32 mx-auto animate-pulse" />
+          <div className="h-10 bg-gray-800/50 rounded w-48 mx-auto animate-pulse" />
+        </div>
+      </div>
+      {[1,2,3].map(i => <div key={i} className="card-dark rounded-lg h-16 animate-pulse" />)}
+    </div>
+  );
 
   return (
     <div className="max-w-2xl mx-auto space-y-6 pb-20 md:pb-0">
       <h1 className="text-2xl font-bold text-white">Mi Billetera</h1>
+      {success && <div className="bg-green-500/10 border border-green-500/30 text-green-400 text-sm rounded-lg p-3 text-center">{success}</div>}
 
-      {success && (
-        <div className="bg-green-500/10 border border-green-500/30 text-green-400 text-sm rounded-lg p-3 text-center">{success}</div>
-      )}
-
-      {/* Balance Card */}
+      {/* Balance */}
       <div className="card-dark rounded-2xl overflow-hidden">
         <div className="h-1.5 gold-gradient" />
         <div className="p-6 text-center">
@@ -84,18 +127,33 @@ export default function WalletPage() {
           <p className="text-3xl sm:text-4xl font-black gold-text mt-1">
             ${balance.toLocaleString("es-CO")} <span className="text-lg">COP</span>
           </p>
-          <button onClick={() => setShowDeposit(!showDeposit)}
-            className="mt-4 gold-gradient text-black font-bold px-8 py-3 rounded-lg hover:opacity-90 transition inline-flex items-center gap-2 text-sm">
-            <ArrowUpCircle size={18} /> Cargar Saldo
-          </button>
         </div>
       </div>
 
+      {/* Tabs */}
+      <div className="flex gap-1 bg-[#111] rounded-xl p-1">
+        {([
+          { key: "depositar" as WalletTab, label: "Depositar", icon: ArrowUpCircle },
+          { key: "retirar" as WalletTab, label: "Retirar", icon: ArrowDownCircle },
+          { key: "solicitudes" as WalletTab, label: "Solicitudes", icon: AlertCircle },
+          { key: "historial" as WalletTab, label: "Historial", icon: Clock },
+        ]).map((tab) => (
+          <button key={tab.key} onClick={() => { setActiveTab(tab.key); setError(""); }}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs sm:text-sm font-medium transition ${
+              activeTab === tab.key ? "bg-[#b8860b]/20 text-[#ffd700]" : "text-gray-500 hover:text-gray-300"
+            }`}>
+            <tab.icon size={14} />
+            <span className="hidden sm:inline">{tab.label}</span>
+            <span className="sm:hidden">{tab.label.slice(0, 4)}</span>
+          </button>
+        ))}
+      </div>
+
       {/* Deposit Form */}
-      {showDeposit && (
+      {activeTab === "depositar" && (
         <div className="card-dark rounded-xl p-5 space-y-4">
           <h3 className="font-bold text-white">Cargar Saldo</h3>
-
+          <p className="text-xs text-gray-500">Tu solicitud sera revisada y aprobada por un administrador.</p>
           <div>
             <label className="block text-xs text-gray-400 mb-2">Metodo de Pago</label>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -113,7 +171,6 @@ export default function WalletPage() {
               ))}
             </div>
           </div>
-
           <div>
             <label className="block text-xs text-gray-400 mb-1">Monto (COP)</label>
             <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)}
@@ -128,61 +185,148 @@ export default function WalletPage() {
               ))}
             </div>
           </div>
-
           <div>
             <label className="block text-xs text-gray-400 mb-1">Numero de Referencia / Comprobante</label>
             <input type="text" value={reference} onChange={(e) => setReference(e.target.value)}
               className="w-full bg-[#0a0a0a] border border-gray-700 rounded-lg px-4 py-3 text-white text-sm focus:border-[#b8860b] focus:outline-none"
               placeholder="Ej: 123456789" />
           </div>
-
           {error && <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-xs rounded-lg p-2 text-center">{error}</div>}
+          <button onClick={handleDeposit} disabled={depositing}
+            className="w-full gold-gradient text-black font-bold py-3 rounded-lg hover:opacity-90 transition disabled:opacity-50 text-sm">
+            {depositing ? "Enviando..." : "Enviar Solicitud de Recarga"}
+          </button>
+        </div>
+      )}
 
-          <div className="flex gap-3">
-            <button onClick={() => setShowDeposit(false)}
-              className="flex-1 border border-gray-700 text-gray-400 py-2.5 rounded-lg hover:bg-white/5 transition text-sm">
-              Cancelar
-            </button>
-            <button onClick={handleDeposit} disabled={depositing}
-              className="flex-1 gold-gradient text-black font-bold py-2.5 rounded-lg hover:opacity-90 transition disabled:opacity-50 text-sm">
-              {depositing ? "Procesando..." : "Confirmar Recarga"}
-            </button>
+      {/* Withdraw Form */}
+      {activeTab === "retirar" && (
+        <div className="card-dark rounded-xl p-5 space-y-4">
+          <h3 className="font-bold text-white">Retirar Fondos</h3>
+          <p className="text-xs text-gray-500">Tu solicitud sera procesada y aprobada por un administrador.</p>
+          <div>
+            <label className="block text-xs text-gray-400 mb-2">Metodo de Retiro</label>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {METHODS.map((m) => (
+                <button key={m.key} onClick={() => setWMethod(m.key)}
+                  className={`flex items-center gap-2 p-3 rounded-lg border text-sm transition ${
+                    wMethod === m.key ? `${m.bg} ${m.border} ${m.color}` : "bg-[#0a0a0a] border-gray-700 text-gray-400 hover:border-gray-600"
+                  }`}>
+                  <m.icon size={18} />
+                  <div className="text-left"><p className="font-medium">{m.label}</p></div>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Numero de Cuenta / Celular</label>
+            <input type="text" value={wAccount} onChange={(e) => setWAccount(e.target.value)}
+              className="w-full bg-[#0a0a0a] border border-gray-700 rounded-lg px-4 py-3 text-white text-sm focus:border-[#b8860b] focus:outline-none"
+              placeholder="Ej: 300-123-4567" />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Monto a Retirar (COP)</label>
+            <input type="number" value={wAmount} onChange={(e) => setWAmount(e.target.value)}
+              className="w-full bg-[#0a0a0a] border border-gray-700 rounded-lg px-4 py-3 text-white focus:border-[#b8860b] focus:outline-none text-lg font-bold"
+              placeholder="50,000" min="10000" step="5000" />
+            <p className="text-xs text-gray-500 mt-1">
+              Retiro minimo: $10,000 COP. Saldo: <span className="text-[#ffd700]">${balance.toLocaleString("es-CO")} COP</span>
+            </p>
+          </div>
+          {error && <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-xs rounded-lg p-2 text-center">{error}</div>}
+          <button onClick={handleWithdraw} disabled={withdrawing}
+            className="w-full bg-gradient-to-r from-red-600 to-red-700 text-white font-bold py-3 rounded-lg hover:opacity-90 transition disabled:opacity-50 text-sm">
+            {withdrawing ? "Enviando..." : "Solicitar Retiro"}
+          </button>
+        </div>
+      )}
+
+      {/* Solicitudes */}
+      {activeTab === "solicitudes" && (
+        <div className="space-y-4">
+          <div>
+            <h3 className="font-bold text-white mb-3 flex items-center gap-2">
+              <ArrowUpCircle size={16} className="text-green-400" /> Solicitudes de Deposito
+            </h3>
+            {deposits.length === 0 ? (
+              <div className="card-dark rounded-xl p-6 text-center text-gray-500 text-sm">No hay solicitudes</div>
+            ) : (
+              <div className="space-y-2">
+                {deposits.map((dep) => (
+                  <div key={dep.id} className="card-dark rounded-lg p-3 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <ArrowUpCircle size={18} className="text-green-400" />
+                      <div>
+                        <p className="text-sm text-white font-medium">${dep.amount.toLocaleString("es-CO")} COP</p>
+                        <p className="text-xs text-gray-500">{methodLabel(dep.method)} - Ref: {dep.reference} - {formatDate(dep.created_at)}</p>
+                      </div>
+                    </div>
+                    {statusBadge(dep.status)}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div>
+            <h3 className="font-bold text-white mb-3 flex items-center gap-2">
+              <ArrowDownCircle size={16} className="text-red-400" /> Solicitudes de Retiro
+            </h3>
+            {withdrawals.length === 0 ? (
+              <div className="card-dark rounded-xl p-6 text-center text-gray-500 text-sm">No hay solicitudes</div>
+            ) : (
+              <div className="space-y-2">
+                {withdrawals.map((wd) => (
+                  <div key={wd.id} className="card-dark rounded-lg p-3 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <ArrowDownCircle size={18} className="text-red-400" />
+                      <div>
+                        <p className="text-sm text-white font-medium">${wd.amount.toLocaleString("es-CO")} COP</p>
+                        <p className="text-xs text-gray-500">{methodLabel(wd.method)} - {wd.account_number} - {formatDate(wd.created_at)}</p>
+                      </div>
+                    </div>
+                    {statusBadge(wd.status)}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      {/* Transaction History */}
-      <div>
-        <h3 className="font-bold text-white mb-3 flex items-center gap-2">
-          <Clock size={16} className="text-[#b8860b]" /> Historial de Transacciones
-        </h3>
-        {transactions.length === 0 ? (
-          <div className="card-dark rounded-xl p-8 text-center text-gray-500 text-sm">
-            No hay transacciones aun
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {transactions.map((tx) => (
-              <div key={tx.id} className="card-dark rounded-lg p-3 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  {tx.type === "deposit" ? (
-                    <ArrowUpCircle size={20} className="text-green-400" />
-                  ) : (
-                    <ArrowDownCircle size={20} className="text-red-400" />
-                  )}
-                  <div>
-                    <p className="text-sm text-white">{tx.description}</p>
-                    <p className="text-xs text-gray-500">{formatDate(tx.created_at)}{tx.method ? ` - ${tx.method}` : ""}</p>
+      {/* Historial */}
+      {activeTab === "historial" && (
+        <div>
+          <h3 className="font-bold text-white mb-3 flex items-center gap-2">
+            <Clock size={16} className="text-[#b8860b]" /> Historial de Transacciones
+          </h3>
+          {transactions.length === 0 ? (
+            <div className="card-dark rounded-xl p-8 text-center text-gray-500 text-sm">
+              No hay transacciones aun
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {transactions.map((tx) => (
+                <div key={tx.id} className="card-dark rounded-lg p-3 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {tx.type === "deposit" || tx.type === "winning" ? (
+                      <ArrowUpCircle size={20} className="text-green-400" />
+                    ) : (
+                      <ArrowDownCircle size={20} className="text-red-400" />
+                    )}
+                    <div>
+                      <p className="text-sm text-white">{tx.description}</p>
+                      <p className="text-xs text-gray-500">{formatDate(tx.created_at)}{tx.method ? ` - ${tx.method}` : ""}</p>
+                    </div>
                   </div>
+                  <span className={`font-bold text-sm ${tx.amount > 0 ? "text-green-400" : "text-red-400"}`}>
+                    {tx.amount > 0 ? "+" : ""}${Math.abs(tx.amount).toLocaleString("es-CO")}
+                  </span>
                 </div>
-                <span className={`font-bold text-sm ${tx.amount > 0 ? "text-green-400" : "text-red-400"}`}>
-                  {tx.amount > 0 ? "+" : ""}${Math.abs(tx.amount).toLocaleString("es-CO")}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

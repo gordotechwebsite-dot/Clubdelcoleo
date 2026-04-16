@@ -55,6 +55,15 @@ export const api = {
   }) => request("/api/auth/register", { method: "POST", body: JSON.stringify(data) }),
   getMe: () => request("/api/auth/me"),
 
+  // Profile
+  updateProfile: (data: { full_name?: string; phone?: string; email?: string }) =>
+    request("/api/auth/profile", { method: "PUT", body: JSON.stringify(data) }),
+  changePassword: (data: { current_password: string; new_password: string }) =>
+    request("/api/auth/password", { method: "PUT", body: JSON.stringify(data) }),
+  getProfileStats: () => request("/api/auth/profile/stats"),
+  selfExclude: (days: number) =>
+    request("/api/auth/self-exclude", { method: "POST", body: JSON.stringify({ days }) }),
+
   // Events
   getEvents: (status?: string, country?: string) => {
     const params = new URLSearchParams();
@@ -70,6 +79,8 @@ export const api = {
     request(`/api/events/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteEvent: (id: number) =>
     request(`/api/events/${id}`, { method: "DELETE" }),
+  declareWinner: (eventId: number, playerId: number) =>
+    request(`/api/events/${eventId}/winner`, { method: "POST", body: JSON.stringify({ player_id: playerId }) }),
 
   // Players
   getPlayers: () => request("/api/players"),
@@ -97,6 +108,15 @@ export const api = {
   getWallet: () => request("/api/wallet"),
   deposit: (data: { amount: number; method: string; reference: string }) =>
     request("/api/wallet/deposit", { method: "POST", body: JSON.stringify(data) }),
+  getMyDeposits: () => request("/api/wallet/deposits"),
+  withdraw: (data: { amount: number; method: string; account_number: string }) =>
+    request("/api/wallet/withdraw", { method: "POST", body: JSON.stringify(data) }),
+  getMyWithdrawals: () => request("/api/wallet/withdrawals"),
+
+  // Notifications
+  getNotifications: () => request("/api/notifications"),
+  markNotificationsRead: () => request("/api/notifications/read", { method: "PUT" }),
+  markOneRead: (id: number) => request(`/api/notifications/${id}/read`, { method: "PUT" }),
 
   // Admin
   getStats: () => request("/api/admin/stats"),
@@ -108,4 +128,12 @@ export const api = {
     request("/api/admin/invite-codes", { method: "POST", body: JSON.stringify({ count }) }),
   getInviteCodes: () => request("/api/admin/invite-codes"),
   seedData: () => request("/api/admin/seed", { method: "POST" }),
+
+  // Admin - Deposits & Withdrawals
+  getAdminDeposits: () => request("/api/admin/deposits"),
+  reviewDeposit: (id: number, status: string) =>
+    request(`/api/admin/deposits/${id}`, { method: "PUT", body: JSON.stringify({ status }) }),
+  getAdminWithdrawals: () => request("/api/admin/withdrawals"),
+  reviewWithdrawal: (id: number, status: string) =>
+    request(`/api/admin/withdrawals/${id}`, { method: "PUT", body: JSON.stringify({ status }) }),
 };
