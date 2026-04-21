@@ -285,6 +285,23 @@ async def add_player_to_event(event_id: int, data: EventPlayerAdd, user=Depends(
         return {"message": "Jugador agregado al evento exitosamente"}
 
 
+@app.put("/api/events/{event_id}/players/{player_id}")
+async def update_player_in_event(event_id: int, player_id: int, data: dict, user=Depends(get_admin_user)):
+    with get_db() as conn:
+        existing = conn.execute(
+            "SELECT 1 FROM event_players WHERE event_id = ? AND player_id = ?",
+            (event_id, player_id)
+        ).fetchone()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Jugador no encontrado en este evento")
+        if "odds" in data:
+            conn.execute(
+                "UPDATE event_players SET odds = ? WHERE event_id = ? AND player_id = ?",
+                (data["odds"], event_id, player_id)
+            )
+        return {"message": "Cuota actualizada exitosamente"}
+
+
 @app.delete("/api/events/{event_id}/players/{player_id}")
 async def remove_player_from_event(event_id: int, player_id: int, user=Depends(get_admin_user)):
     with get_db() as conn:

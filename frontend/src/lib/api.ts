@@ -95,6 +95,8 @@ export const api = {
   // Event Players
   addPlayerToEvent: (eventId: number, data: { player_id: number; position?: number; odds: number }) =>
     request(`/api/events/${eventId}/players`, { method: "POST", body: JSON.stringify(data) }),
+  updatePlayerOdds: (eventId: number, playerId: number, odds: number) =>
+    request(`/api/events/${eventId}/players/${playerId}`, { method: "PUT", body: JSON.stringify({ odds }) }),
   removePlayerFromEvent: (eventId: number, playerId: number) =>
     request(`/api/events/${eventId}/players/${playerId}`, { method: "DELETE" }),
 
