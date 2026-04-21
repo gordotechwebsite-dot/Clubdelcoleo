@@ -15,7 +15,7 @@ interface Player {
   stats_wins: number; stats_losses: number;
 }
 interface EventPlayer {
-  player_id: number; name: string; nickname: string; team: string; position: number;
+  id: number; name: string; nickname: string; team: string; position: number;
   odds: number; rating: number; stats_wins: number; stats_losses: number;
 }
 interface UserData {
@@ -387,21 +387,21 @@ function EventsPanel({ events, players, reload, showMsg, loadPlayers }: {
                   )}
 
                   {event.players && event.players.map((p) => (
-                    <div key={p.player_id} className="flex items-center justify-between bg-[#0a0a0a] rounded-lg p-2">
+                    <div key={p.id} className="flex items-center justify-between bg-[#0a0a0a] rounded-lg p-2">
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-gray-400">#{p.position}</span>
                         <span className="text-sm text-white">{p.name}</span>
-                        <span className="text-xs text-gray-500">&quot;{p.nickname}&quot;</span>
+                        {p.nickname && <span className="text-xs text-gray-500">"{p.nickname}"</span>}
                       </div>
                       <div className="flex items-center gap-2">
                         <input
-                          defaultValue={editOdds[p.player_id] ?? p.odds.toFixed(2)}
-                          onChange={(e) => setEditOdds({ ...editOdds, [p.player_id]: e.target.value })}
+                          defaultValue={editOdds[p.id] ?? p.odds.toFixed(2)}
+                          onChange={(e) => setEditOdds({ ...editOdds, [p.id]: e.target.value })}
                           className="w-16 bg-[#1a1a1a] border border-gray-700 rounded text-xs text-[#ffd700] text-center p-1 font-bold"
                         />
-                        <button onClick={() => handleUpdateOdds(event.id, p.player_id, editOdds[p.player_id] ?? p.odds.toFixed(2))}
+                        <button onClick={() => handleUpdateOdds(event.id, p.id, editOdds[p.id] ?? p.odds.toFixed(2))}
                           className="text-[#ffd700] hover:text-[#b8860b]"><Save size={12} /></button>
-                        <button onClick={() => handleRemovePlayer(event.id, p.player_id)}
+                        <button onClick={() => handleRemovePlayer(event.id, p.id)}
                           className="text-red-400 hover:text-red-300"><Trash2 size={12} /></button>
                       </div>
                     </div>
@@ -418,10 +418,10 @@ function EventsPanel({ events, players, reload, showMsg, loadPlayers }: {
                       <p className="text-xs text-gray-400 font-medium flex items-center gap-1"><Crown size={12} className="text-[#ffd700]" /> Declarar Ganador</p>
                       <div className="flex flex-wrap gap-2">
                         {event.players.map((p) => (
-                          <button key={p.player_id} onClick={async () => {
+                          <button key={p.id} onClick={async () => {
                             if (!confirm(`Declarar a ${p.name} como ganador de ${event.name}?`)) return;
                             try {
-                              await api.declareWinner(event.id, p.player_id);
+                              await api.declareWinner(event.id, p.id);
                               showMsg(`${p.name} declarado como ganador!`);
                               reload();
                             } catch (err) { showMsg(err instanceof Error ? err.message : "Error"); }
