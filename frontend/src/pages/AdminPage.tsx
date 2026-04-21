@@ -167,9 +167,10 @@ function EventsPanel({ events, players, reload, showMsg, loadPlayers }: {
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ name: "", description: "", location: "", country: "colombia", date: "", time: "", stream_url: "" });
   const [expanded, setExpanded] = useState<number | null>(null);
-  const [editOdds, setEditOdds] = useState<Record<number, string>>({});
   const [addPlayer, setAddPlayer] = useState<{ eventId: number; playerId: string; odds: string } | null>(null);
   const [editEvent, setEditEvent] = useState<{ id: number; name: string; date: string; time: string; location: string; description: string } | null>(null);
+  const [savingOdds, setSavingOdds] = useState<number | null>(null);
+  const oddsRefs = {} as Record<number, HTMLInputElement | null>;
 
   useEffect(() => { loadPlayers(); }, []);
 
@@ -202,14 +203,18 @@ function EventsPanel({ events, players, reload, showMsg, loadPlayers }: {
     } catch { showMsg("Error al actualizar URL"); }
   };
 
-  const handleUpdateOdds = async (eventId: number, playerId: number, odds: string) => {
-    const oddsNum = parseFloat(odds);
+  const handleUpdateOdds = async (eventId: number, playerId: number) => {
+    const input = oddsRefs[playerId];
+    if (!input) { showMsg("Error: campo no encontrado"); return; }
+    const oddsNum = parseFloat(input.value);
     if (isNaN(oddsNum) || oddsNum <= 1) { showMsg("Cuota debe ser mayor a 1.00"); return; }
+    setSavingOdds(playerId);
     try {
       await api.updatePlayerOdds(eventId, playerId, oddsNum);
       showMsg(`Cuota actualizada: ${oddsNum.toFixed(2)}x`);
       reload();
-    } catch { showMsg("Error al actualizar cuota"); }
+    } catch (err) { showMsg("Error al actualizar cuota: " + (err instanceof Error ? err.message : "desconocido")); }
+    setSavingOdds(null);
   };
 
   const handleAddPlayer = async () => {
@@ -334,15 +339,16 @@ function EventsPanel({ events, players, reload, showMsg, loadPlayers }: {
                     <textarea value={editEvent.description} onChange={(e) => setEditEvent({ ...editEvent, description: e.target.value })}
                       placeholder="Descripcion" className={`${inputClass} h-16 resize-none`} />
                     <div className="flex gap-2">
-                      <button onClick={async () => {
+                      <button type="button" onClick={async (e) => {
+                        e.preventDefault(); e.stopPropagation();
                         try {
                           await api.updateEvent(event.id, { name: editEvent.name, date: editEvent.date, time: editEvent.time, location: editEvent.location, description: editEvent.description });
-                          showMsg("Evento actualizado");
+                          showMsg("Evento actualizado exitosamente");
                           setEditEvent(null);
                           reload();
-                        } catch { showMsg("Error al actualizar"); }
-                      }} className="px-3 py-1.5 text-xs gold-gradient text-black rounded-lg font-medium flex items-center gap-1"><Save size={12} /> Guardar</button>
-                      <button onClick={() => setEditEvent(null)} className="px-3 py-1.5 text-xs text-gray-400 border border-gray-700 rounded-lg">Cancelar</button>
+                        } catch (err) { showMsg("Error al actualizar: " + (err instanceof Error ? err.message : "desconocido")); }
+                      }} className="px-4 py-2 text-sm gold-gradient text-black rounded-lg font-medium flex items-center gap-1"><Save size={14} /> Guardar Cambios</button>
+                      <button type="button" onClick={() => setEditEvent(null)} className="px-4 py-2 text-sm text-gray-400 border border-gray-700 rounded-lg hover:border-gray-500 transition">Cancelar</button>
                     </div>
                   </div>
                 ) : (
@@ -387,22 +393,28 @@ function EventsPanel({ events, players, reload, showMsg, loadPlayers }: {
                   )}
 
                   {event.players && event.players.map((p) => (
-                    <div key={p.id} className="flex items-center justify-between bg-[#0a0a0a] rounded-lg p-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-400">#{p.position}</span>
-                        <span className="text-sm text-white">{p.name}</span>
-                        {p.nickname && <span className="text-xs text-gray-500">"{p.nickname}"</span>}
+                    <div key={p.id} className="flex items-center justify-between bg-[#0a0a0a] rounded-lg p-2 gap-2">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <span className="text-xs text-gray-400 shrink-0">#{p.position}</span>
+                        <span className="text-sm text-white truncate">{p.name}</span>
+                        {p.nickname && <span className="text-xs text-gray-500 shrink-0">"{p.nickname}"</span>}
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1 shrink-0">
                         <input
-                          defaultValue={editOdds[p.id] ?? p.odds.toFixed(2)}
-                          onChange={(e) => setEditOdds({ ...editOdds, [p.id]: e.target.value })}
-                          className="w-16 bg-[#1a1a1a] border border-gray-700 rounded text-xs text-[#ffd700] text-center p-1 font-bold"
+                          ref={(el) => { oddsRefs[p.id] = el; }}
+                          defaultValue={p.odds.toFixed(2)}
+                          className="w-16 bg-[#1a1a1a] border border-gray-700 rounded text-xs text-[#ffd700] text-center p-1.5 font-bold"
                         />
-                        <button onClick={() => handleUpdateOdds(event.id, p.id, editOdds[p.id] ?? p.odds.toFixed(2))}
-                          className="text-[#ffd700] hover:text-[#b8860b]"><Save size={12} /></button>
-                        <button onClick={() => handleRemovePlayer(event.id, p.id)}
-                          className="text-red-400 hover:text-red-300"><Trash2 size={12} /></button>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleUpdateOdds(event.id, p.id); }}
+                          disabled={savingOdds === p.id}
+                          className="px-2 py-1.5 text-xs bg-[#b8860b]/20 text-[#ffd700] border border-[#b8860b]/50 rounded hover:bg-[#b8860b]/40 transition disabled:opacity-50"
+                        >{savingOdds === p.id ? "..." : "Guardar"}</button>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleRemovePlayer(event.id, p.id); }}
+                          className="px-1.5 py-1.5 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded transition"><Trash2 size={14} /></button>
                       </div>
                     </div>
                   ))}
