@@ -169,6 +169,7 @@ function EventsPanel({ events, players, reload, showMsg, loadPlayers }: {
   const [expanded, setExpanded] = useState<number | null>(null);
   const [editOdds, setEditOdds] = useState<Record<number, string>>({});
   const [addPlayer, setAddPlayer] = useState<{ eventId: number; playerId: string; odds: string } | null>(null);
+  const [editEvent, setEditEvent] = useState<{ id: number; name: string; date: string; time: string; location: string; description: string } | null>(null);
 
   useEffect(() => { loadPlayers(); }, []);
 
@@ -315,6 +316,41 @@ function EventsPanel({ events, players, reload, showMsg, loadPlayers }: {
                     </button>
                   ))}
                 </div>
+
+                {/* Edit Event Details */}
+                {editEvent && editEvent.id === event.id ? (
+                  <div className="bg-[#0a0a0a] rounded-lg p-3 space-y-2">
+                    <p className="text-xs text-gray-400 font-medium">Editar Evento</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <input value={editEvent.name} onChange={(e) => setEditEvent({ ...editEvent, name: e.target.value })}
+                        placeholder="Nombre" className={inputClass} />
+                      <input value={editEvent.location} onChange={(e) => setEditEvent({ ...editEvent, location: e.target.value })}
+                        placeholder="Ubicacion" className={inputClass} />
+                      <input type="date" value={editEvent.date} onChange={(e) => setEditEvent({ ...editEvent, date: e.target.value })}
+                        className={inputClass} />
+                      <input type="time" value={editEvent.time} onChange={(e) => setEditEvent({ ...editEvent, time: e.target.value })}
+                        className={inputClass} />
+                    </div>
+                    <textarea value={editEvent.description} onChange={(e) => setEditEvent({ ...editEvent, description: e.target.value })}
+                      placeholder="Descripcion" className={`${inputClass} h-16 resize-none`} />
+                    <div className="flex gap-2">
+                      <button onClick={async () => {
+                        try {
+                          await api.updateEvent(event.id, { name: editEvent.name, date: editEvent.date, time: editEvent.time, location: editEvent.location, description: editEvent.description });
+                          showMsg("Evento actualizado");
+                          setEditEvent(null);
+                          reload();
+                        } catch { showMsg("Error al actualizar"); }
+                      }} className="px-3 py-1.5 text-xs gold-gradient text-black rounded-lg font-medium flex items-center gap-1"><Save size={12} /> Guardar</button>
+                      <button onClick={() => setEditEvent(null)} className="px-3 py-1.5 text-xs text-gray-400 border border-gray-700 rounded-lg">Cancelar</button>
+                    </div>
+                  </div>
+                ) : (
+                  <button onClick={() => setEditEvent({ id: event.id, name: event.name, date: event.date, time: event.time, location: event.location, description: event.description || "" })}
+                    className="flex items-center gap-1 text-xs text-[#ffd700] hover:text-[#b8860b]">
+                    <Save size={12} /> Editar Datos del Evento
+                  </button>
+                )}
 
                 <div className="flex items-center gap-2">
                   <Radio size={14} className="text-red-400" />
