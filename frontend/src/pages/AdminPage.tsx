@@ -206,7 +206,7 @@ function EventsPanel({ events, players, reload, showMsg, loadPlayers }: {
     const oddsNum = parseFloat(odds);
     if (isNaN(oddsNum) || oddsNum <= 1) { showMsg("Cuota debe ser mayor a 1.00"); return; }
     try {
-      await api.addPlayerToEvent(eventId, { player_id: playerId, odds: oddsNum });
+      await api.updatePlayerOdds(eventId, playerId, oddsNum);
       showMsg(`Cuota actualizada: ${oddsNum.toFixed(2)}x`);
       reload();
     } catch { showMsg("Error al actualizar cuota"); }
