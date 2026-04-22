@@ -64,3 +64,13 @@
   border-radius: 0.5rem;
 }
 
+/* Toast notification slide-in */
+@keyframes slideInRight {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+.animate-slide-in-right {
+  animation: slideInRight 0.35s ease-out;
+}
+

@@ -1,15 +1,18 @@
-from fastapi import FastAPI, HTTPException, Depends, status, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, Depends, status, UploadFile, File, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import StreamingResponse
 from typing import List, Optional
 import uuid
 import os
+import asyncio
+import json
 from datetime import datetime, timezone, timedelta
 
 from app.database import get_db, init_db
 from app.auth import (
     hash_password, verify_password, create_token,
-    get_current_user, get_admin_user
+    get_current_user, get_admin_user, get_user_from_token_str
 )
 from app.models import (
     RegisterRequest, LoginRequest, TokenResponse,
@@ -23,6 +26,29 @@ from app.models import (
 )
 
 app = FastAPI(title="Club del Coleo API", version="1.0.0")
+
+# ==================== SSE NOTIFICATION SYSTEM ====================
+# In-memory store of connected SSE clients: { user_id: [asyncio.Queue, ...] }
+_sse_clients: dict[int, list[asyncio.Queue]] = {}
+
+
+async def broadcast_to_user(user_id: int, event_type: str, data: dict):
+    """Send a real-time event to all connected clients of a specific user."""
+    payload = json.dumps({"type": event_type, **data}, ensure_ascii=False)
+    queues = _sse_clients.get(user_id, [])
+    for q in queues:
+        try:
+            q.put_nowait(payload)
+        except asyncio.QueueFull:
+            pass  # drop if client is too slow
+
+
+async def broadcast_to_admins(event_type: str, data: dict):
+    """Send a real-time event to all connected admin clients."""
+    with get_db() as conn:
+        admins = conn.execute("SELECT id FROM users WHERE is_admin = 1").fetchall()
+    for admin in admins:
+        await broadcast_to_user(admin["id"], event_type, data)
 
 # Disable CORS. Do not remove this for full-stack development.
 app.add_middleware(
@@ -383,21 +409,29 @@ async def place_bet(bet: BetCreate, user=Depends(get_current_user)):
         player = conn.execute("SELECT name FROM players WHERE id = ?", (bet.player_id,)).fetchone()
         new_balance = conn.execute("SELECT balance FROM users WHERE id = ?", (user["id"],)).fetchone()
 
-        return {
-            "bet_id": bet_id,
-            "ticket_code": ticket_code,
-            "event_name": event["name"],
-            "event_date": event["date"],
-            "event_time": event["time"],
-            "event_location": event["location"],
-            "player_name": player["name"],
-            "amount": bet.amount,
-            "odds": odds,
-            "potential_win": potential_win,
-            "status": "pending",
-            "new_balance": new_balance["balance"],
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        }
+    # SSE: notify admins about new bet
+    await broadcast_to_admins("new_bet", {
+        "title": "Nueva apuesta",
+        "message": f"{user['username']} aposto ${int(bet.amount):,} COP en {event['name']} por {player['name']}",
+        "amount": bet.amount,
+        "username": user["username"],
+    })
+
+    return {
+        "bet_id": bet_id,
+        "ticket_code": ticket_code,
+        "event_name": event["name"],
+        "event_date": event["date"],
+        "event_time": event["time"],
+        "event_location": event["location"],
+        "player_name": player["name"],
+        "amount": bet.amount,
+        "odds": odds,
+        "potential_win": potential_win,
+        "status": "pending",
+        "new_balance": new_balance["balance"],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 @app.get("/api/bets")
@@ -518,13 +552,24 @@ async def deposit(
             (f"Solicitud de ${int(amount):,} COP via {method} de {user['username']}",)
         )
 
-        return {
-            "message": "Solicitud de recarga enviada. Pendiente de aprobacion por el administrador.",
-            "request_id": cursor.lastrowid,
-            "amount": amount,
-            "method": method,
-            "status": "pending",
-        }
+        req_id = cursor.lastrowid
+
+    # SSE: notify admins about new deposit request
+    await broadcast_to_admins("new_deposit", {
+        "title": "Nueva solicitud de deposito",
+        "message": f"Solicitud de ${int(amount):,} COP via {method} de {user['username']}",
+        "amount": amount,
+        "method": method,
+        "username": user["username"],
+    })
+
+    return {
+        "message": "Solicitud de recarga enviada. Pendiente de aprobacion por el administrador.",
+        "request_id": req_id,
+        "amount": amount,
+        "method": method,
+        "status": "pending",
+    }
 
 
 @app.get("/api/wallet/deposits")
@@ -811,6 +856,58 @@ async def mark_one_read(notif_id: int, user=Depends(get_current_user)):
         return {"message": "ok"}
 
 
+# ==================== SSE STREAM ====================
+
+@app.get("/api/notifications/stream")
+async def notifications_stream(request: Request, token: str = ""):
+    """Server-Sent Events stream for real-time notifications."""
+    if not token:
+        raise HTTPException(status_code=401, detail="Token requerido")
+    user = get_user_from_token_str(token)
+    user_id = user["id"]
+    queue: asyncio.Queue = asyncio.Queue(maxsize=50)
+
+    # Register this client
+    if user_id not in _sse_clients:
+        _sse_clients[user_id] = []
+    _sse_clients[user_id].append(queue)
+
+    async def event_generator():
+        try:
+            # Send initial connection event
+            yield f"data: {json.dumps({'type': 'connected', 'message': 'Conectado'})}\n\n"
+            while True:
+                # Check if client disconnected
+                if await request.is_disconnected():
+                    break
+                try:
+                    # Wait for a message with timeout (for keep-alive)
+                    payload = await asyncio.wait_for(queue.get(), timeout=25.0)
+                    yield f"data: {payload}\n\n"
+                except asyncio.TimeoutError:
+                    # Send keep-alive ping
+                    yield f": ping\n\n"
+        finally:
+            # Cleanup on disconnect
+            if user_id in _sse_clients:
+                try:
+                    _sse_clients[user_id].remove(queue)
+                except ValueError:
+                    pass
+                if not _sse_clients[user_id]:
+                    del _sse_clients[user_id]
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 # ==================== DECLARE WINNER ====================
 
 @app.post("/api/events/{event_id}/winner")
@@ -882,11 +979,35 @@ async def declare_winner(event_id: int, data: DeclareWinner, user=Depends(get_ad
                  f"Tu apuesta en {event['name']} no gano. El ganador fue {player['name']}.")
             )
 
-        return {
-            "message": f"Ganador declarado: {player['name']}",
-            "winning_bets": len(winning_bets),
-            "losing_bets": len(losing_bets),
-        }
+        # Collect user ids for SSE broadcast
+        winner_user_ids = [(b["user_id"], b["potential_win"]) for b in winning_bets]
+        loser_user_ids = [b["user_id"] for b in losing_bets]
+        event_name = event["name"]
+        player_name = player["name"]
+
+    # SSE: notify winners
+    for uid, pwin in winner_user_ids:
+        await broadcast_to_user(uid, "bet_won", {
+            "title": "Apuesta ganada!",
+            "message": f"Tu apuesta en {event_name} gano! Ganaste ${int(pwin):,} COP",
+            "amount": pwin,
+            "event_name": event_name,
+            "player_name": player_name,
+        })
+    # SSE: notify losers
+    for uid in loser_user_ids:
+        await broadcast_to_user(uid, "bet_lost", {
+            "title": "Apuesta perdida",
+            "message": f"Tu apuesta en {event_name} no gano. El ganador fue {player_name}.",
+            "event_name": event_name,
+            "player_name": player_name,
+        })
+
+    return {
+        "message": f"Ganador declarado: {player_name}",
+        "winning_bets": len(winner_user_ids),
+        "losing_bets": len(loser_user_ids),
+    }
 
 
 # ==================== ADMIN DEPOSITS & WITHDRAWALS ====================
@@ -920,32 +1041,52 @@ async def review_deposit(dep_id: int, data: DepositReview, user=Depends(get_admi
         )
 
         method_names = {"nequi": "Nequi", "daviplata": "Daviplata", "bancolombia": "Bancolombia"}
+        dep_user_id = dep["user_id"]
+        dep_amount = dep["amount"]
+        dep_method = dep["method"]
         if data.status == "approved":
             conn.execute(
                 "UPDATE users SET balance = balance + ? WHERE id = ?",
-                (dep["amount"], dep["user_id"])
+                (dep_amount, dep_user_id)
             )
+            new_bal = conn.execute("SELECT balance FROM users WHERE id = ?", (dep_user_id,)).fetchone()["balance"]
             conn.execute(
                 """INSERT INTO transactions (user_id, type, amount, method, reference, description)
                    VALUES (?, 'deposit', ?, ?, ?, ?)""",
-                (dep["user_id"], dep["amount"], dep["method"], dep["reference"],
-                 f"Recarga via {method_names.get(dep['method'], dep['method'])}")
+                (dep_user_id, dep_amount, dep_method, dep["reference"],
+                 f"Recarga via {method_names.get(dep_method, dep_method)}")
             )
             conn.execute(
                 """INSERT INTO notifications (user_id, title, message, type)
                    VALUES (?, ?, ?, 'deposit')""",
-                (dep["user_id"], "Deposito aprobado",
-                 f"Tu deposito de ${int(dep['amount']):,} COP via {method_names.get(dep['method'], dep['method'])} ha sido aprobado.")
+                (dep_user_id, "Deposito aprobado",
+                 f"Tu deposito de ${int(dep_amount):,} COP via {method_names.get(dep_method, dep_method)} ha sido aprobado.")
             )
         else:
+            new_bal = None
             conn.execute(
                 """INSERT INTO notifications (user_id, title, message, type)
                    VALUES (?, ?, ?, 'deposit')""",
-                (dep["user_id"], "Deposito rechazado",
-                 f"Tu solicitud de deposito de ${int(dep['amount']):,} COP fue rechazada. Contacta soporte para mas informacion.")
+                (dep_user_id, "Deposito rechazado",
+                 f"Tu solicitud de deposito de ${int(dep_amount):,} COP fue rechazada. Contacta soporte para mas informacion.")
             )
 
-        return {"message": f"Deposito {data.status}"}
+    # SSE: notify user about deposit review
+    if data.status == "approved":
+        await broadcast_to_user(dep_user_id, "deposit_approved", {
+            "title": "Deposito aprobado",
+            "message": f"Tu deposito de ${int(dep_amount):,} COP ha sido aprobado.",
+            "amount": dep_amount,
+            "new_balance": new_bal,
+        })
+    else:
+        await broadcast_to_user(dep_user_id, "deposit_rejected", {
+            "title": "Deposito rechazado",
+            "message": f"Tu solicitud de deposito de ${int(dep_amount):,} COP fue rechazada.",
+            "amount": dep_amount,
+        })
+
+    return {"message": f"Deposito {data.status}"}
 
 
 @app.get("/api/admin/withdrawals")
@@ -977,32 +1118,73 @@ async def review_withdrawal(wd_id: int, data: WithdrawalReview, user=Depends(get
         )
 
         method_names = {"nequi": "Nequi", "daviplata": "Daviplata", "bancolombia": "Bancolombia"}
+        wd_user_id = wd["user_id"]
+        wd_amount = wd["amount"]
         if data.status == "approved":
             conn.execute(
                 "UPDATE users SET balance = balance - ? WHERE id = ?",
-                (wd["amount"], wd["user_id"])
+                (wd_amount, wd_user_id)
             )
             conn.execute(
                 """INSERT INTO transactions (user_id, type, amount, method, description)
                    VALUES (?, 'withdrawal', ?, ?, ?)""",
-                (wd["user_id"], -wd["amount"], wd["method"],
+                (wd_user_id, -wd_amount, wd["method"],
                  f"Retiro via {method_names.get(wd['method'], wd['method'])} a {wd['account_number']}")
             )
             conn.execute(
                 """INSERT INTO notifications (user_id, title, message, type)
                    VALUES (?, ?, ?, 'withdrawal')""",
-                (wd["user_id"], "Retiro aprobado",
-                 f"Tu retiro de ${int(wd['amount']):,} COP a {wd['account_number']} ha sido aprobado.")
+                (wd_user_id, "Retiro aprobado",
+                 f"Tu retiro de ${int(wd_amount):,} COP a {wd['account_number']} ha sido aprobado.")
             )
         else:
             conn.execute(
                 """INSERT INTO notifications (user_id, title, message, type)
                    VALUES (?, ?, ?, 'withdrawal')""",
-                (wd["user_id"], "Retiro rechazado",
-                 f"Tu solicitud de retiro de ${int(wd['amount']):,} COP fue rechazada.")
+                (wd_user_id, "Retiro rechazado",
+                 f"Tu solicitud de retiro de ${int(wd_amount):,} COP fue rechazada.")
             )
 
-        return {"message": f"Retiro {data.status}"}
+    # SSE: notify user about withdrawal review
+    if data.status == "approved":
+        await broadcast_to_user(wd_user_id, "withdrawal_approved", {
+            "title": "Retiro aprobado",
+            "message": f"Tu retiro de ${int(wd_amount):,} COP ha sido aprobado.",
+            "amount": wd_amount,
+        })
+    else:
+        await broadcast_to_user(wd_user_id, "withdrawal_rejected", {
+            "title": "Retiro rechazado",
+            "message": f"Tu solicitud de retiro de ${int(wd_amount):,} COP fue rechazada.",
+            "amount": wd_amount,
+        })
+
+    return {"message": f"Retiro {data.status}"}
+
+
+# ==================== PROMOTIONS ====================
+
+class PromotionData(BaseModel):
+    title: str
+    message: str
+
+@app.post("/api/admin/promotions")
+async def send_promotion(data: PromotionData, user=Depends(get_admin_user)):
+    """Send a promotional notification to ALL active users via SSE."""
+    with get_db() as conn:
+        active_users = conn.execute("SELECT id FROM users WHERE is_active = 1").fetchall()
+        for u in active_users:
+            conn.execute(
+                "INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, 'promotion')",
+                (u["id"], data.title, data.message),
+            )
+        # Broadcast via SSE to all connected clients
+        for u in active_users:
+            await broadcast_to_user(u["id"], "promotion", {
+                "title": data.title,
+                "message": data.message,
+            })
+    return {"message": f"Promocion enviada a {len(active_users)} usuarios"}
 
 
 # ==================== SEED DATA ====================
