@@ -765,6 +765,26 @@ async def get_user_bets(user_id: int, user=Depends(get_admin_user)):
         return [dict(b) for b in bets]
 
 
+@app.get("/api/admin/users/{user_id}/deposits")
+async def get_user_deposits(user_id: int, user=Depends(get_admin_user)):
+    with get_db() as conn:
+        deposits = conn.execute(
+            "SELECT * FROM deposits WHERE user_id = ? ORDER BY created_at DESC",
+            (user_id,)
+        ).fetchall()
+        return [dict(d) for d in deposits]
+
+
+@app.get("/api/admin/users/{user_id}/withdrawals")
+async def get_user_withdrawals(user_id: int, user=Depends(get_admin_user)):
+    with get_db() as conn:
+        withdrawals = conn.execute(
+            "SELECT * FROM withdrawals WHERE user_id = ? ORDER BY created_at DESC",
+            (user_id,)
+        ).fetchall()
+        return [dict(w) for w in withdrawals]
+
+
 @app.get("/api/admin/stats")
 async def admin_stats(user=Depends(get_admin_user)):
     with get_db() as conn:
@@ -1399,8 +1419,6 @@ async def seed_data(user=Depends(get_admin_user)):
             ("Copa Llanera 2026", "Competencia regional con los mejores jinetes del llano.", "Manga de Coleo Yopal, Casanare", "colombia", "2026-05-22", "10:00", "upcoming"),
             ("Clasico de los Centauros", "Enfrentamiento entre los equipos mas fuertes de la temporada.", "Manga de Coleo Arauca", "colombia", "2026-06-01", "16:00", "upcoming"),
             ("Festival del Joropo y Coleo", "Evento cultural con competencias de coleo y musica llanera.", "Manga de Coleo San Martin, Meta", "colombia", "2026-04-10", "09:00", "finished"),
-            ("Campeonato Venezolano de Coleo", "Los mejores coleadores de Venezuela compiten por el titulo nacional.", "Manga de Coleo Barinas", "venezuela", "2026-05-20", "15:00", "upcoming"),
-            ("Copa Llanos de Venezuela", "Competencia entre los mejores equipos del llano venezolano.", "Manga de Coleo Calabozo, Guarico", "venezuela", "2026-06-05", "11:00", "upcoming"),
         ]
         for e in events_data:
             conn.execute(

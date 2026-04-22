@@ -12,15 +12,13 @@ export default function EventsPage() {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
-  const [country, setCountry] = useState("all");
   const [search, setSearch] = useState("");
 
   useEffect(() => {
     setLoading(true);
     const status = filter === "all" ? undefined : filter;
-    const ctry = country === "all" ? undefined : country;
-    api.getEvents(status, ctry).then(setEvents).catch(console.error).finally(() => setLoading(false));
-  }, [filter, country]);
+    api.getEvents(status).then(setEvents).catch(console.error).finally(() => setLoading(false));
+  }, [filter]);
 
   const filtered = events.filter((e) =>
     e.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -53,25 +51,6 @@ export default function EventsPage() {
             />
           </div>
         </div>
-      </div>
-
-      {/* Country filters */}
-      <div className="flex gap-2">
-        {[
-          { key: "all", label: "Todos los Paises", flag: "" },
-          { key: "colombia", label: "Colombia", flag: "COL" },
-          { key: "venezuela", label: "Venezuela", flag: "VEN" },
-        ].map((c) => (
-          <button key={c.key} onClick={() => setCountry(c.key)}
-            className={`px-4 py-2 rounded-lg text-xs font-medium transition flex items-center gap-1.5 ${
-              country === c.key
-                ? "bg-[#b8860b]/20 text-[#ffd700] border border-[#b8860b]/50"
-                : "bg-[#1a1a1a] text-gray-400 border border-gray-700 hover:border-[#b8860b]/30"
-            }`}>
-            {c.flag && <span className="text-base">{c.flag}</span>}
-            {c.label}
-          </button>
-        ))}
       </div>
 
       {/* Status filters */}
@@ -126,7 +105,6 @@ export default function EventsPage() {
               <div className="p-5 space-y-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold px-2 py-0.5 rounded bg-[#b8860b]/20 text-[#ffd700]">{event.country === "venezuela" ? "VEN" : "COL"}</span>
                     <h3 className="font-bold text-white group-hover:text-[#ffd700] transition text-sm leading-tight">{event.name}</h3>
                   </div>
                   <span className={`shrink-0 text-xs font-bold px-2 py-0.5 rounded-full ${

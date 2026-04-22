@@ -109,7 +109,6 @@ export default function HomePage() {
                 <div className="p-5 space-y-3">
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold px-2 py-0.5 rounded bg-[#b8860b]/20 text-[#ffd700]">{event.country === "venezuela" ? "VEN" : "COL"}</span>
                       <h3 className="font-bold text-white group-hover:text-[#ffd700] transition text-sm sm:text-base leading-tight">
                         {event.name}
                       </h3>

@@ -166,6 +166,10 @@ export const api = {
   reviewWithdrawal: (id: number, status: string) =>
     request(`/api/admin/withdrawals/${id}`, { method: "PUT", body: JSON.stringify({ status }) }),
 
+  // Admin - User History
+  getUserDeposits: (userId: number) => request(`/api/admin/users/${userId}/deposits`),
+  getUserWithdrawals: (userId: number) => request(`/api/admin/users/${userId}/withdrawals`),
+
   // Password Recovery
   requestPasswordReset: (username_or_email: string) =>
     request("/api/auth/password-reset-request", { method: "POST", body: JSON.stringify({ username_or_email }) }),
