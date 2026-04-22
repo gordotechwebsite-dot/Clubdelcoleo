@@ -14,6 +14,7 @@ from app.auth import (
     hash_password, verify_password, create_token,
     get_current_user, get_admin_user, get_user_from_token_str
 )
+from app import telegram_bot
 from app.models import (
     RegisterRequest, LoginRequest, TokenResponse,
     EventCreate, EventUpdate,
@@ -61,8 +62,14 @@ app.add_middleware(
 
 
 @app.on_event("startup")
-def startup():
+async def startup():
     init_db()
+    # Set up Telegram bot webhook if configured
+    if telegram_bot.is_configured():
+        backend_url = os.environ.get("BACKEND_PUBLIC_URL", "")
+        if backend_url:
+            webhook_url = f"{backend_url.rstrip('/')}/api/telegram/webhook"
+            await telegram_bot.setup_webhook(webhook_url)
 
 
 @app.get("/healthz")
@@ -562,6 +569,15 @@ async def deposit(
         "method": method,
         "username": user["username"],
     })
+
+    # Telegram: send comprobante to admin chat with approve/reject buttons
+    await telegram_bot.notify_new_deposit(
+        deposit_id=req_id,
+        username=user["username"],
+        amount=amount,
+        method=method,
+        comprobante_path=filepath,
+    )
 
     return {
         "message": "Solicitud de recarga enviada. Pendiente de aprobacion por el administrador.",
@@ -1185,6 +1201,152 @@ async def send_promotion(data: PromotionData, user=Depends(get_admin_user)):
                 "message": data.message,
             })
     return {"message": f"Promocion enviada a {len(active_users)} usuarios"}
+
+
+# ==================== TELEGRAM BOT WEBHOOK ====================
+
+@app.post("/api/telegram/webhook")
+async def telegram_webhook(request: Request):
+    """Handle Telegram webhook updates (callback queries from inline buttons)."""
+    try:
+        update = await request.json()
+    except Exception:
+        return {"ok": True}
+
+    # Handle callback queries (inline button presses)
+    callback_query = update.get("callback_query")
+    if callback_query:
+        callback_id = callback_query["id"]
+        data = callback_query.get("data", "")
+        message = callback_query.get("message", {})
+        chat_id = str(message.get("chat", {}).get("id", ""))
+        message_id = message.get("message_id")
+
+        if data.startswith("approve_deposit:") or data.startswith("reject_deposit:"):
+            action, dep_id_str = data.split(":", 1)
+            try:
+                dep_id = int(dep_id_str)
+            except ValueError:
+                await telegram_bot.answer_callback_query(callback_id, "ID de deposito invalido")
+                return {"ok": True}
+
+            new_status = "approved" if action == "approve_deposit" else "rejected"
+
+            with get_db() as conn:
+                dep = conn.execute("SELECT * FROM deposit_requests WHERE id = ?", (dep_id,)).fetchone()
+                if not dep:
+                    await telegram_bot.answer_callback_query(callback_id, "Deposito no encontrado")
+                    return {"ok": True}
+                if dep["status"] != "pending":
+                    await telegram_bot.answer_callback_query(callback_id, f"Deposito ya fue {dep['status']}")
+                    # Update the message to reflect current status
+                    dep_user = conn.execute("SELECT username FROM users WHERE id = ?", (dep["user_id"],)).fetchone()
+                    await telegram_bot.edit_message_caption(
+                        chat_id, message_id,
+                        f"<b>Deposito #{dep_id} - {'APROBADO' if dep['status'] == 'approved' else 'RECHAZADO'}</b>\n\n"
+                        f"<b>Usuario:</b> {dep_user['username'] if dep_user else 'N/A'}\n"
+                        f"<b>Monto:</b> ${int(dep['amount']):,} COP\n"
+                        f"<b>Estado:</b> Ya procesado"
+                    )
+                    return {"ok": True}
+
+                # Get first admin user for reviewed_by
+                admin = conn.execute("SELECT id FROM users WHERE is_admin = 1 LIMIT 1").fetchone()
+                admin_id = admin["id"] if admin else 1
+
+                conn.execute(
+                    "UPDATE deposit_requests SET status = ?, reviewed_by = ?, reviewed_at = ? WHERE id = ?",
+                    (new_status, admin_id, datetime.now(timezone.utc).isoformat(), dep_id)
+                )
+
+                dep_user_id = dep["user_id"]
+                dep_amount = dep["amount"]
+                dep_method = dep["method"]
+                method_names = {"nequi": "Nequi", "daviplata": "Daviplata", "bancolombia": "Bancolombia"}
+
+                if new_status == "approved":
+                    conn.execute(
+                        "UPDATE users SET balance = balance + ? WHERE id = ?",
+                        (dep_amount, dep_user_id)
+                    )
+                    new_bal = conn.execute("SELECT balance FROM users WHERE id = ?", (dep_user_id,)).fetchone()["balance"]
+                    conn.execute(
+                        """INSERT INTO transactions (user_id, type, amount, method, reference, description)
+                           VALUES (?, 'deposit', ?, ?, ?, ?)""",
+                        (dep_user_id, dep_amount, dep_method, dep["reference"],
+                         f"Recarga via {method_names.get(dep_method, dep_method)}")
+                    )
+                    conn.execute(
+                        """INSERT INTO notifications (user_id, title, message, type)
+                           VALUES (?, ?, ?, 'deposit')""",
+                        (dep_user_id, "Deposito aprobado",
+                         f"Tu deposito de ${int(dep_amount):,} COP via {method_names.get(dep_method, dep_method)} ha sido aprobado.")
+                    )
+                else:
+                    new_bal = None
+                    conn.execute(
+                        """INSERT INTO notifications (user_id, title, message, type)
+                           VALUES (?, ?, ?, 'deposit')""",
+                        (dep_user_id, "Deposito rechazado",
+                         f"Tu solicitud de deposito de ${int(dep_amount):,} COP fue rechazada. Contacta soporte para mas informacion.")
+                    )
+
+                dep_user = conn.execute("SELECT username FROM users WHERE id = ?", (dep_user_id,)).fetchone()
+
+            # SSE: notify user about deposit review
+            if new_status == "approved":
+                await broadcast_to_user(dep_user_id, "deposit_approved", {
+                    "title": "Deposito aprobado",
+                    "message": f"Tu deposito de ${int(dep_amount):,} COP ha sido aprobado.",
+                    "amount": dep_amount,
+                    "new_balance": new_bal,
+                })
+            else:
+                await broadcast_to_user(dep_user_id, "deposit_rejected", {
+                    "title": "Deposito rechazado",
+                    "message": f"Tu solicitud de deposito de ${int(dep_amount):,} COP fue rechazada.",
+                    "amount": dep_amount,
+                })
+
+            # Update Telegram message
+            status_label = "APROBADO" if new_status == "approved" else "RECHAZADO"
+            username = dep_user["username"] if dep_user else "N/A"
+            updated_caption = (
+                f"<b>Deposito #{dep_id} - {status_label}</b>\n\n"
+                f"<b>Usuario:</b> {username}\n"
+                f"<b>Monto:</b> ${int(dep_amount):,} COP\n"
+                f"<b>Metodo:</b> {method_names.get(dep_method, dep_method)}\n"
+                f"<b>Estado:</b> {status_label}"
+            )
+            await telegram_bot.edit_message_caption(chat_id, message_id, updated_caption)
+            await telegram_bot.answer_callback_query(
+                callback_id,
+                f"Deposito #{dep_id} {status_label}"
+            )
+
+    # Handle /start command - respond with chat ID info
+    msg = update.get("message", {})
+    if msg.get("text", "").startswith("/start"):
+        chat_id = str(msg.get("chat", {}).get("id", ""))
+        await telegram_bot.send_message(
+            chat_id,
+            "<b>Club del Coleo - Bot Admin</b>\n\n"
+            f"Chat ID: <code>{chat_id}</code>\n\n"
+            "Este bot te notificara cuando un usuario solicite un deposito. "
+            "Podras aprobar o rechazar directamente desde aqui."
+        )
+
+    return {"ok": True}
+
+
+@app.get("/api/admin/telegram/status")
+async def telegram_status(user=Depends(get_admin_user)):
+    """Check Telegram bot configuration status."""
+    return {
+        "configured": telegram_bot.is_configured(),
+        "bot_token_set": bool(telegram_bot.TELEGRAM_BOT_TOKEN),
+        "chat_id_set": bool(telegram_bot.TELEGRAM_ADMIN_CHAT_ID),
+    }
 
 
 # ==================== SEED DATA ====================
