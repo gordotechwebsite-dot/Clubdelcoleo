@@ -22,7 +22,8 @@ export function setUser(user: Record<string, unknown>) {
   localStorage.setItem("user", JSON.stringify(user));
 }
 
-async function request(path: string, options: RequestInit = {}) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function request(path: string, options: RequestInit = {}, retries = 2): Promise<any> {
   const token = getToken();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -31,17 +32,37 @@ async function request(path: string, options: RequestInit = {}) {
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;
   }
-  const res = await fetch(`${API_URL}${path}`, { ...options, headers });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    if (res.status === 401 && !path.includes("/auth/login")) {
-      clearToken();
-      window.location.href = "/login";
-      throw new Error("Sesion expirada. Inicia sesion de nuevo.");
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(`${API_URL}${path}`, { ...options, headers });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 401 && !path.includes("/auth/login")) {
+          clearToken();
+          window.location.href = "/login";
+          throw new Error("Sesion expirada. Inicia sesion de nuevo.");
+        }
+        throw new Error(data.detail || `Error ${res.status}`);
+      }
+      return res.json();
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      // Only retry on network errors (TypeError), not on HTTP/business errors
+      const isNetworkError = lastError.name === "TypeError" || lastError.message === "Load failed" || lastError.message === "Failed to fetch";
+      if (!isNetworkError || attempt >= retries) {
+        break;
+      }
+      // Wait before retrying (1s, then 2s)
+      await new Promise(r => setTimeout(r, (attempt + 1) * 1000));
     }
-    throw new Error(data.detail || `Error ${res.status}`);
   }
-  return res.json();
+  // Translate common network errors to Spanish
+  const msg = lastError?.message || "Error desconocido";
+  if (msg === "Load failed" || msg === "Failed to fetch") {
+    throw new Error("Error de conexion. Verifica tu internet e intenta de nuevo.");
+  }
+  throw lastError || new Error(msg);
 }
 
 export const api = {
