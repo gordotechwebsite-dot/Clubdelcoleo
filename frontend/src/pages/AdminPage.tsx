@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { api } from "../lib/api";
 import {
   Shield, Users, Calendar, Trophy, BarChart3, Ticket, Plus, Trash2, Save,
@@ -58,8 +58,8 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState("");
 
-  const loadTab = async (t: Tab) => {
-    setLoading(true);
+  const loadTab = useCallback(async (t: Tab, silent = false) => {
+    if (!silent) setLoading(true);
     try {
       if (t === "stats") { const s = await api.getStats(); setStats(s); }
       else if (t === "events") {
@@ -74,10 +74,19 @@ export default function AdminPage() {
       else if (t === "deposits") { const d = await api.getAdminDeposits(); setAdminDeposits(d); }
       else if (t === "withdrawals") { const w = await api.getAdminWithdrawals(); setAdminWithdrawals(w); }
     } catch (err) { console.error(err); }
-    setLoading(false);
-  };
+    if (!silent) setLoading(false);
+  }, []);
 
-  useEffect(() => { loadTab(tab); }, [tab]);
+  // Load on tab change
+  useEffect(() => { loadTab(tab); }, [tab, loadTab]);
+
+  // Auto-refresh every 10 seconds
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => {
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    intervalRef.current = setInterval(() => { loadTab(tab, true); }, 10000);
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, [tab, loadTab]);
 
   const showMsg = (m: string) => { setMsg(m); setTimeout(() => setMsg(""), 3000); };
 
@@ -538,10 +547,19 @@ function PlayersPanel({ players, reload, showMsg }: {
 }
 
 /* === USERS === */
+interface UserBet {
+  id: number; event_id: number; player_id: number; amount: number;
+  odds: number; potential_win: number; status: string; ticket_code: string;
+  created_at: string; event_name: string; player_name: string;
+}
+
 function UsersPanel({ users, reload, showMsg }: {
   users: UserData[]; reload: () => void; showMsg: (m: string) => void;
 }) {
   const formatCOP = (n: number) => n.toLocaleString("es-CO");
+  const [expandedUser, setExpandedUser] = useState<number | null>(null);
+  const [userBets, setUserBets] = useState<UserBet[]>([]);
+  const [loadingBets, setLoadingBets] = useState(false);
 
   const toggleActive = async (id: number, is_active: boolean) => {
     try {
@@ -551,30 +569,88 @@ function UsersPanel({ users, reload, showMsg }: {
     } catch { showMsg("Error al actualizar"); }
   };
 
+  const handleDoubleClick = async (userId: number) => {
+    if (expandedUser === userId) { setExpandedUser(null); setUserBets([]); return; }
+    setExpandedUser(userId);
+    setLoadingBets(true);
+    try {
+      const bets = await api.getUserBets(userId);
+      setUserBets(bets);
+    } catch { showMsg("Error al cargar apuestas"); }
+    setLoadingBets(false);
+  };
+
+  const formatDate = (d: string) => {
+    try { return new Date(d).toLocaleDateString("es-CO", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true }); }
+    catch { return d; }
+  };
+
+  const statusLabel = (s: string) => {
+    if (s === "pending") return <span className="text-yellow-400">Pendiente</span>;
+    if (s === "won") return <span className="text-green-400">Ganada</span>;
+    if (s === "lost") return <span className="text-red-400">Perdida</span>;
+    return <span className="text-gray-400">{s}</span>;
+  };
+
   return (
     <div className="space-y-4">
       <h2 className="font-bold text-white">Usuarios ({users.length})</h2>
+      <p className="text-xs text-gray-500">Toca dos veces en un usuario para ver su historial de apuestas</p>
       <div className="space-y-2">
         {users.map((u) => (
-          <div key={u.id} className="card-dark rounded-xl p-3 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${
-                u.is_admin ? "gold-gradient text-black" : "bg-[#1a1a1a] text-gray-400"
-              }`}>
-                {u.username.charAt(0).toUpperCase()}
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <p className="font-semibold text-white text-sm">{u.full_name || u.username}</p>
-                  {u.is_admin && <span className="text-xs bg-[#b8860b]/20 text-[#ffd700] px-1.5 py-0.5 rounded">ADMIN</span>}
+          <div key={u.id}>
+            <div
+              onDoubleClick={() => handleDoubleClick(u.id)}
+              className={`card-dark rounded-xl p-3 flex items-center justify-between cursor-pointer transition ${
+                expandedUser === u.id ? "!border-[#ffd700] bg-[#ffd700]/5" : "hover:border-gray-600"
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${
+                  u.is_admin ? "gold-gradient text-black" : "bg-[#1a1a1a] text-gray-400"
+                }`}>
+                  {u.username.charAt(0).toUpperCase()}
                 </div>
-                <p className="text-xs text-gray-500">{u.email} - Saldo: ${formatCOP(u.balance)} COP</p>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="font-semibold text-white text-sm">{u.full_name || u.username}</p>
+                    {u.is_admin && <span className="text-xs bg-[#b8860b]/20 text-[#ffd700] px-1.5 py-0.5 rounded">ADMIN</span>}
+                  </div>
+                  <p className="text-xs text-gray-500">{u.email} - Saldo: ${formatCOP(u.balance)} COP</p>
+                </div>
               </div>
+              <button onClick={(e) => { e.stopPropagation(); toggleActive(u.id, u.is_active); }}
+                className={`px-3 py-1 text-xs rounded-full ${u.is_active ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}>
+                {u.is_active ? "Activo" : "Inactivo"}
+              </button>
             </div>
-            <button onClick={() => toggleActive(u.id, u.is_active)}
-              className={`px-3 py-1 text-xs rounded-full ${u.is_active ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}>
-              {u.is_active ? "Activo" : "Inactivo"}
-            </button>
+            {expandedUser === u.id && (
+              <div className="ml-4 mt-1 mb-2 space-y-1">
+                <p className="text-xs text-[#ffd700] font-medium mb-2">Historial de Apuestas - @{u.username}</p>
+                {loadingBets ? (
+                  <p className="text-xs text-gray-500">Cargando apuestas...</p>
+                ) : userBets.length === 0 ? (
+                  <p className="text-xs text-gray-500">Este usuario no tiene apuestas</p>
+                ) : (
+                  userBets.map((bet) => (
+                    <div key={bet.id} className="bg-[#111] border border-gray-800 rounded-lg p-3 flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-white font-medium">{bet.event_name}</p>
+                        <p className="text-xs text-gray-500">
+                          {bet.player_name} - Cuota: {bet.odds.toFixed(2)}x - {formatDate(bet.created_at)}
+                        </p>
+                        <p className="text-xs text-gray-600 font-mono">{bet.ticket_code}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm text-white font-bold">${formatCOP(bet.amount)} COP</p>
+                        <p className="text-xs text-gray-500">Gan: ${formatCOP(bet.potential_win)} COP</p>
+                        <p className="text-xs">{statusLabel(bet.status)}</p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
           </div>
         ))}
       </div>
