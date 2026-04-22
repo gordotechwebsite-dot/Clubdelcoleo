@@ -139,6 +139,10 @@ export const api = {
   getNotifications: () => request("/api/notifications"),
   markNotificationsRead: () => request("/api/notifications/read", { method: "PUT" }),
   markOneRead: (id: number) => request(`/api/notifications/${id}/read`, { method: "PUT" }),
+  getSSEUrl: () => {
+    const token = getToken();
+    return `${API_URL}/api/notifications/stream?token=${encodeURIComponent(token || "")}`;
+  },
 
   // Admin
   getStats: () => request("/api/admin/stats"),
@@ -151,6 +155,8 @@ export const api = {
     request("/api/admin/invite-codes", { method: "POST", body: JSON.stringify({ count }) }),
   getInviteCodes: () => request("/api/admin/invite-codes"),
   seedData: () => request("/api/admin/seed", { method: "POST" }),
+  sendPromotion: (data: { title: string; message: string }) =>
+    request("/api/admin/promotions", { method: "POST", body: JSON.stringify(data) }),
 
   // Admin - Deposits & Withdrawals
   getAdminDeposits: () => request("/api/admin/deposits"),

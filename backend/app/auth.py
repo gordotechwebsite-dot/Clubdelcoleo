@@ -41,8 +41,9 @@ def decode_token(token: str) -> dict:
         raise HTTPException(status_code=401, detail="Token invalido")
 
 
-def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    payload = decode_token(credentials.credentials)
+def get_user_from_token_str(token: str) -> dict:
+    """Authenticate user from a raw token string (used for SSE query param auth)."""
+    payload = decode_token(token)
     user_id = int(payload.get("sub"))
     with get_db() as conn:
         user = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
@@ -51,6 +52,10 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
         if not user["is_active"]:
             raise HTTPException(status_code=403, detail="Cuenta desactivada")
         return dict(user)
+
+
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    return get_user_from_token_str(credentials.credentials)
 
 
 def get_admin_user(credentials: HTTPAuthorizationCredentials = Depends(security)):

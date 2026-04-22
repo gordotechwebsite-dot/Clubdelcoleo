@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { api } from "../lib/api";
 import {
   Shield, Users, Calendar, Trophy, BarChart3, Ticket, Plus, Trash2, Save,
-  X, ChevronDown, ChevronUp, Radio, RefreshCw, ArrowUpCircle, ArrowDownCircle, CheckCircle2, XCircle, Crown,
+  X, ChevronDown, ChevronUp, Radio, RefreshCw, ArrowUpCircle, ArrowDownCircle, CheckCircle2, XCircle, Crown, Megaphone, Send,
 } from "lucide-react";
 
 interface Event {
@@ -43,7 +43,7 @@ interface WithdrawalReq {
   account_number: string; status: string; created_at: string;
 }
 
-type Tab = "stats" | "events" | "players" | "users" | "bets" | "invites" | "deposits" | "withdrawals";
+type Tab = "stats" | "events" | "players" | "users" | "bets" | "invites" | "deposits" | "withdrawals" | "promotions";
 
 export default function AdminPage() {
   const [tab, setTab] = useState<Tab>("stats");
@@ -99,6 +99,7 @@ export default function AdminPage() {
     { key: "users", label: "Usuarios", icon: Users },
     { key: "bets", label: "Apuestas", icon: Ticket },
     { key: "invites", label: "Invitaciones", icon: Shield },
+    { key: "promotions", label: "Promociones", icon: Megaphone },
   ];
 
   return (
@@ -139,6 +140,7 @@ export default function AdminPage() {
           {tab === "deposits" && <DepositsPanel deposits={adminDeposits} reload={() => loadTab("deposits")} showMsg={showMsg} />}
           {tab === "withdrawals" && <WithdrawalsPanel withdrawals={adminWithdrawals} reload={() => loadTab("withdrawals")} showMsg={showMsg} />}
           {tab === "invites" && <InvitesPanel invites={invites} reload={() => loadTab("invites")} showMsg={showMsg} />}
+          {tab === "promotions" && <PromotionsPanel showMsg={showMsg} />}
         </>
       )}
     </div>
@@ -873,6 +875,69 @@ function InvitesPanel({ invites, reload, showMsg }: {
             </span>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+/* === PROMOTIONS === */
+function PromotionsPanel({ showMsg }: { showMsg: (m: string) => void }) {
+  const [title, setTitle] = useState("");
+  const [message, setMessage] = useState("");
+  const [sending, setSending] = useState(false);
+
+  const inputClass = "w-full bg-[#0a0a0a] border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:border-[#b8860b] focus:outline-none";
+
+  const handleSend = async () => {
+    if (!title.trim() || !message.trim()) { showMsg("Titulo y mensaje son requeridos"); return; }
+    setSending(true);
+    try {
+      const res = await api.sendPromotion({ title: title.trim(), message: message.trim() });
+      showMsg(res.message || "Promocion enviada");
+      setTitle("");
+      setMessage("");
+    } catch { showMsg("Error al enviar promocion"); }
+    setSending(false);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <Megaphone size={18} className="text-[#ffd700]" />
+        <h2 className="font-bold text-white">Enviar Promocion</h2>
+      </div>
+      <p className="text-xs text-gray-400">Envia un mensaje promocional a todos los usuarios activos. Aparecera como notificacion en tiempo real.</p>
+
+      <div className="card-dark rounded-xl p-5 space-y-4">
+        <div>
+          <label className="text-xs text-gray-400 mb-1 block">Titulo</label>
+          <input
+            placeholder="Ej: Bono de bienvenida"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className={inputClass}
+            maxLength={100}
+          />
+        </div>
+        <div>
+          <label className="text-xs text-gray-400 mb-1 block">Mensaje</label>
+          <textarea
+            placeholder="Escribe el mensaje de la promocion..."
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            className={`${inputClass} h-28 resize-none`}
+            maxLength={500}
+          />
+          <p className="text-[10px] text-gray-600 mt-1 text-right">{message.length}/500</p>
+        </div>
+        <button
+          onClick={handleSend}
+          disabled={sending || !title.trim() || !message.trim()}
+          className="flex items-center justify-center gap-2 w-full py-3 text-sm gold-gradient text-black rounded-lg font-bold disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <Send size={16} />
+          {sending ? "Enviando..." : "Enviar Promocion a Todos los Usuarios"}
+        </button>
       </div>
     </div>
   );
