@@ -85,7 +85,7 @@ export default function WalletPage() {
   };
 
   const formatDate = (d: string) => {
-    try { return new Date(d).toLocaleDateString("es-CO", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true }); }
+    try { return new Date(d).toLocaleDateString("es-CO", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/Bogota" }); }
     catch { return d; }
   };
 

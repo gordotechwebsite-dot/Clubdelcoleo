@@ -12,6 +12,14 @@ import os
 import asyncio
 import json
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
+
+# Colombia timezone (UTC-5, no DST)
+COLOMBIA_TZ = ZoneInfo("America/Bogota")
+
+def now_colombia() -> datetime:
+    """Get current datetime in Colombia timezone."""
+    return datetime.now(COLOMBIA_TZ)
 
 from app.database import get_db, init_db
 from app.auth import (
@@ -123,7 +131,7 @@ async def register(req: RegisterRequest):
 
         conn.execute(
             "UPDATE invite_codes SET is_used = 1, used_by = ?, used_at = ? WHERE id = ?",
-            (user_id, datetime.now(timezone.utc).isoformat(), invite["id"])
+            (user_id, now_colombia().isoformat(), invite["id"])
         )
 
         token = create_token(user_id, False)
@@ -364,7 +372,7 @@ async def place_bet(bet: BetCreate, user=Depends(get_current_user)):
     if user.get("self_excluded_until"):
         try:
             excluded = datetime.fromisoformat(user["self_excluded_until"])
-            if datetime.now(timezone.utc) < excluded:
+            if now_colombia() < excluded:
                 raise HTTPException(status_code=403, detail="Tu cuenta esta en periodo de auto-exclusion. No puedes apostar en este momento.")
         except (ValueError, TypeError):
             pass
@@ -441,7 +449,7 @@ async def place_bet(bet: BetCreate, user=Depends(get_current_user)):
         "potential_win": potential_win,
         "status": "pending",
         "new_balance": new_balance["balance"],
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": now_colombia().isoformat(),
     }
 
 
@@ -538,8 +546,8 @@ async def deposit(
         today_deposits = conn.execute(
             """SELECT COALESCE(SUM(amount), 0) as total FROM deposit_requests
                WHERE user_id = ? AND status = 'approved'
-               AND date(created_at) = date('now')""",
-            (user["id"],)
+               AND date(created_at) = date(?)""",
+            (user["id"], now_colombia().strftime("%Y-%m-%d"))
         ).fetchone()["total"]
         if today_deposits + amount > daily_limit:
             raise HTTPException(
@@ -834,7 +842,7 @@ async def self_exclude(data: SelfExclusion, user=Depends(get_current_user)):
     if data.days < 1 or data.days > 365:
         raise HTTPException(status_code=400, detail="Periodo de exclusion: 1-365 dias")
     with get_db() as conn:
-        exclude_until = (datetime.now(timezone.utc) + timedelta(days=data.days)).isoformat()
+        exclude_until = (now_colombia() + timedelta(days=data.days)).isoformat()
         conn.execute("UPDATE users SET self_excluded_until = ? WHERE id = ?", (exclude_until, user["id"]))
         return {"message": f"Te has auto-excluido por {data.days} dias", "excluded_until": exclude_until}
 
@@ -968,7 +976,7 @@ async def declare_winner(event_id: int, data: DeclareWinner, user=Depends(get_ad
         ).fetchall()
         for bet in winning_bets:
             conn.execute("UPDATE bets SET status = 'won', resolved_at = ? WHERE id = ?",
-                         (datetime.now(timezone.utc).isoformat(), bet["id"]))
+                         (now_colombia().isoformat(), bet["id"]))
             conn.execute("UPDATE users SET balance = balance + ? WHERE id = ?",
                          (bet["potential_win"], bet["user_id"]))
             conn.execute(
@@ -991,7 +999,7 @@ async def declare_winner(event_id: int, data: DeclareWinner, user=Depends(get_ad
         ).fetchall()
         for bet in losing_bets:
             conn.execute("UPDATE bets SET status = 'lost', resolved_at = ? WHERE id = ?",
-                         (datetime.now(timezone.utc).isoformat(), bet["id"]))
+                         (now_colombia().isoformat(), bet["id"]))
             conn.execute(
                 """INSERT INTO notifications (user_id, title, message, type)
                    VALUES (?, ?, ?, 'loss')""",
@@ -1057,7 +1065,7 @@ async def review_deposit(dep_id: int, data: DepositReview, user=Depends(get_admi
 
         conn.execute(
             "UPDATE deposit_requests SET status = ?, reviewed_by = ?, reviewed_at = ? WHERE id = ?",
-            (data.status, user["id"], datetime.now(timezone.utc).isoformat(), dep_id)
+            (data.status, user["id"], now_colombia().isoformat(), dep_id)
         )
 
         method_names = {"nequi": "Nequi", "daviplata": "Daviplata", "bancolombia": "Bancolombia"}
@@ -1134,7 +1142,7 @@ async def review_withdrawal(wd_id: int, data: WithdrawalReview, user=Depends(get
 
         conn.execute(
             "UPDATE withdrawal_requests SET status = ?, reviewed_by = ?, reviewed_at = ? WHERE id = ?",
-            (data.status, user["id"], datetime.now(timezone.utc).isoformat(), wd_id)
+            (data.status, user["id"], now_colombia().isoformat(), wd_id)
         )
 
         method_names = {"nequi": "Nequi", "daviplata": "Daviplata", "bancolombia": "Bancolombia"}
@@ -1260,7 +1268,7 @@ async def telegram_webhook(request: Request):
 
                 conn.execute(
                     "UPDATE deposit_requests SET status = ?, reviewed_by = ?, reviewed_at = ? WHERE id = ?",
-                    (new_status, admin_id, datetime.now(timezone.utc).isoformat(), dep_id)
+                    (new_status, admin_id, now_colombia().isoformat(), dep_id)
                 )
 
                 dep_user_id = dep["user_id"]
