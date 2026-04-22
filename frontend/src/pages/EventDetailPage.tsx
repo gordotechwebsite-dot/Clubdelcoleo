@@ -32,10 +32,12 @@ export default function EventDetailPage() {
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<"position" | "odds_asc" | "odds_desc" | "name" | "rating">("position");
-  const user = getUser();
+  const [user, setUserState] = useState(getUser());
 
   useEffect(() => {
     if (id) api.getEvent(Number(id)).then(setEvent).catch(console.error).finally(() => setLoading(false));
+    // Fetch fresh balance from server
+    api.getMe().then((me) => { setUser(me); setUserState(me); }).catch(() => {});
   }, [id]);
 
   const filteredPlayers = useMemo(() => {
@@ -99,6 +101,7 @@ export default function EventDetailPage() {
       setShowConfirmation(true);
       const me = await api.getMe();
       setUser(me);
+      setUserState(me);
     } catch (err) {
       setBetError(err instanceof Error ? err.message : "Error al apostar");
     } finally {
