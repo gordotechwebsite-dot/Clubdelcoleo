@@ -8,7 +8,7 @@ from app.database import get_db
 
 SECRET_KEY = os.environ.get("JWT_SECRET", "clubdelcoleo_secret_key_2024_super_secure")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_HOURS = 24
+ACCESS_TOKEN_EXPIRE_HOURS = 168  # 7 days
 
 security = HTTPBearer()
 

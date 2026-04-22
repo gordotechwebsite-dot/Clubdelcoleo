@@ -34,6 +34,11 @@ async function request(path: string, options: RequestInit = {}) {
   const res = await fetch(`${API_URL}${path}`, { ...options, headers });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
+    if (res.status === 401 && !path.includes("/auth/login")) {
+      clearToken();
+      window.location.href = "/login";
+      throw new Error("Sesion expirada. Inicia sesion de nuevo.");
+    }
     throw new Error(data.detail || `Error ${res.status}`);
   }
   return res.json();
