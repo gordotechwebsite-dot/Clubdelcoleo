@@ -220,9 +220,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* Header */}
       <header className="sticky top-0 z-50 bg-[#0d0d0d] border-b border-[#b8860b]/30 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
-          <Link to="/home" className="flex items-center gap-3">
-            <img src="/logo.jpg" alt="Club del Coleo" className="h-10 w-10 rounded-full object-cover" />
-            <span className="text-lg font-bold gold-text hidden sm:block">Club del Coleo</span>
+          <Link to="/home" className="flex items-center">
+            <img src="/logo-play.png" alt="Play del Coleo" className="h-12 sm:h-14 object-contain" />
           </Link>
 
           {/* Desktop nav */}
