@@ -86,7 +86,8 @@ export default function EventDetailPage() {
       return;
     }
     if (amount > (user?.balance || 0)) {
-      setBetError("Saldo insuficiente");
+      setBetError("Saldo insuficiente. Redirigiendo a recargar...");
+      setTimeout(() => navigate("/wallet"), 1500);
       return;
     }
     setBetError("");
