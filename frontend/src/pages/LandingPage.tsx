@@ -109,7 +109,7 @@ export default function LandingPage() {
           <RevealSection delay={300}>
             <p className="text-gray-400 text-base sm:text-xl max-w-2xl mx-auto mb-8 leading-relaxed">
               La primera y unica plataforma digital de apuestas dedicada exclusivamente al deporte del coleo.
-              Campeonatos en <span className="text-white font-semibold">Colombia</span> y <span className="text-white font-semibold">Venezuela</span>.
+              Campeonatos en <span className="text-white font-semibold">Colombia</span> con los mejores coleadores del llano.
             </p>
           </RevealSection>
 
@@ -178,11 +178,6 @@ export default function LandingPage() {
                         <Clock size={16} className="text-[#b8860b] flex-shrink-0" />
                         <p className="text-gray-300 text-sm">{formatTime12(ev.time)}</p>
                       </div>
-                      <div className="mt-auto pt-2">
-                        <span className={"inline-block text-xs font-bold px-3 py-1 rounded-full " + (ev.country === "colombia" ? "bg-yellow-500/20 text-yellow-400" : "bg-blue-500/20 text-blue-400")}>
-                          {ev.country === "colombia" ? "COL" : "VEN"}
-                        </span>
-                      </div>
                     </div>
                   </div>
                 </RevealSection>
@@ -221,7 +216,7 @@ export default function LandingPage() {
               {
                 icon: Trophy,
                 title: "Campeonatos Oficiales",
-                desc: "Cubrimos los mejores campeonatos de coleo en Colombia y Venezuela con los coleadores mas destacados del llano.",
+                desc: "Cubrimos los mejores campeonatos de coleo en Colombia con los coleadores mas destacados del llano.",
                 color: "from-[#b8860b]/20 to-transparent",
               },
               {

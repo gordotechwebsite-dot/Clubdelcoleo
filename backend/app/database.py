@@ -1,6 +1,14 @@
 import sqlite3
 import os
+import shutil
+import glob
 from contextlib import contextmanager
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+COLOMBIA_TZ = ZoneInfo("America/Bogota")
+
+BACKUP_DIR = "/data/backups" if os.path.isdir("/data") else "backups"
 
 _default_db = "/data/app.db" if os.path.isdir("/data") else "clubdelcoleo.db"
 DB_PATH = os.environ.get("DB_PATH", _default_db)
@@ -8,6 +16,88 @@ DB_PATH = os.environ.get("DB_PATH", _default_db)
 
 def get_db_path():
     return DB_PATH
+
+
+def ensure_backup_dir():
+    os.makedirs(BACKUP_DIR, exist_ok=True)
+
+
+def create_backup(label: str = "auto") -> str:
+    """Create a backup of the current database. Returns the backup file path."""
+    ensure_backup_dir()
+    db_path = get_db_path()
+    if not os.path.exists(db_path):
+        return ""
+    now = datetime.now(COLOMBIA_TZ)
+    timestamp = now.strftime("%Y%m%d_%H%M%S")
+    backup_name = f"backup_{label}_{timestamp}.db"
+    backup_path = os.path.join(BACKUP_DIR, backup_name)
+    # Use SQLite backup API for safe copy
+    src = sqlite3.connect(db_path)
+    dst = sqlite3.connect(backup_path)
+    src.backup(dst)
+    dst.close()
+    src.close()
+    # Keep only last 20 backups
+    backups = sorted(glob.glob(os.path.join(BACKUP_DIR, "backup_*.db")))
+    while len(backups) > 20:
+        os.remove(backups.pop(0))
+    return backup_path
+
+
+def list_backups() -> list[dict]:
+    """List all available backups."""
+    ensure_backup_dir()
+    backups = sorted(glob.glob(os.path.join(BACKUP_DIR, "backup_*.db")), reverse=True)
+    result = []
+    for bp in backups:
+        name = os.path.basename(bp)
+        size = os.path.getsize(bp)
+        result.append({"name": name, "path": bp, "size_kb": round(size / 1024, 1)})
+    return result
+
+
+def restore_backup(backup_path: str) -> bool:
+    """Restore database from a backup file."""
+    if not os.path.exists(backup_path):
+        return False
+    db_path = get_db_path()
+    # First backup current state before restoring
+    if os.path.exists(db_path):
+        create_backup("pre_restore")
+    shutil.copy2(backup_path, db_path)
+    return True
+
+
+def has_data() -> bool:
+    """Check if database has any meaningful data (users beyond default admin)."""
+    try:
+        conn = sqlite3.connect(get_db_path())
+        count = conn.execute("SELECT COUNT(*) FROM events").fetchone()[0]
+        user_count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+        conn.close()
+        return count > 0 or user_count > 1
+    except Exception:
+        return False
+
+
+def auto_restore_if_empty():
+    """If the DB is empty but backups exist, restore from the latest backup."""
+    if has_data():
+        return
+    backups = list_backups()
+    if not backups:
+        return
+    # Find latest non-pre_restore backup
+    for bp in backups:
+        if "pre_restore" not in bp["name"]:
+            restore_backup(bp["path"])
+            print(f"AUTO-RESTORED database from {bp['name']}")
+            return
+    # If only pre_restore backups, use the latest one
+    if backups:
+        restore_backup(backups[0]["path"])
+        print(f"AUTO-RESTORED database from {backups[0]['name']}")
 
 
 @contextmanager

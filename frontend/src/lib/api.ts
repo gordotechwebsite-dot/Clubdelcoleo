@@ -165,4 +165,20 @@ export const api = {
   getAdminWithdrawals: () => request("/api/admin/withdrawals"),
   reviewWithdrawal: (id: number, status: string) =>
     request(`/api/admin/withdrawals/${id}`, { method: "PUT", body: JSON.stringify({ status }) }),
+
+  // Admin - User History
+  getUserDeposits: (userId: number) => request(`/api/admin/users/${userId}/deposits`),
+  getUserWithdrawals: (userId: number) => request(`/api/admin/users/${userId}/withdrawals`),
+
+  // Password Recovery
+  requestPasswordReset: (username_or_email: string) =>
+    request("/api/auth/password-reset-request", { method: "POST", body: JSON.stringify({ username_or_email }) }),
+  adminResetPassword: (userId: number, new_password: string) =>
+    request(`/api/admin/users/${userId}/reset-password`, { method: "PUT", body: JSON.stringify({ new_password }) }),
+
+  // Admin - Backups
+  getBackups: () => request("/api/admin/backups"),
+  createBackup: () => request("/api/admin/backups", { method: "POST" }),
+  restoreBackup: (name: string) =>
+    request("/api/admin/backups/restore", { method: "POST", body: JSON.stringify({ name }) }),
 };

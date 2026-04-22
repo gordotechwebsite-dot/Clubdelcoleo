@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { api } from "../lib/api";
 import {
   Shield, Users, Calendar, Trophy, BarChart3, Ticket, Plus, Trash2, Save,
-  X, ChevronDown, ChevronUp, Radio, RefreshCw, ArrowUpCircle, ArrowDownCircle, CheckCircle2, XCircle, Crown, Megaphone, Send,
+  X, ChevronDown, ChevronUp, Radio, RefreshCw, ArrowUpCircle, ArrowDownCircle, CheckCircle2, XCircle, Crown, Megaphone, Send, Database, Key, Download, Upload,
 } from "lucide-react";
 
 interface Event {
@@ -43,7 +43,7 @@ interface WithdrawalReq {
   account_number: string; status: string; created_at: string;
 }
 
-type Tab = "stats" | "events" | "players" | "users" | "bets" | "invites" | "deposits" | "withdrawals" | "promotions";
+type Tab = "stats" | "events" | "players" | "users" | "bets" | "invites" | "deposits" | "withdrawals" | "promotions" | "backups";
 
 export default function AdminPage() {
   const [tab, setTab] = useState<Tab>("stats");
@@ -100,6 +100,7 @@ export default function AdminPage() {
     { key: "bets", label: "Apuestas", icon: Ticket },
     { key: "invites", label: "Invitaciones", icon: Shield },
     { key: "promotions", label: "Promociones", icon: Megaphone },
+    { key: "backups", label: "Backups", icon: Database },
   ];
 
   return (
@@ -141,6 +142,7 @@ export default function AdminPage() {
           {tab === "withdrawals" && <WithdrawalsPanel withdrawals={adminWithdrawals} reload={() => loadTab("withdrawals")} showMsg={showMsg} />}
           {tab === "invites" && <InvitesPanel invites={invites} reload={() => loadTab("invites")} showMsg={showMsg} />}
           {tab === "promotions" && <PromotionsPanel showMsg={showMsg} />}
+          {tab === "backups" && <BackupsPanel showMsg={showMsg} />}
         </>
       )}
     </div>
@@ -281,10 +283,7 @@ function EventsPanel({ events, players, reload, showMsg, loadPlayers }: {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <input placeholder="Nombre del evento" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inputClass} />
             <input placeholder="Ubicacion" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} className={inputClass} />
-            <select value={form.country} onChange={(e) => setForm({ ...form, country: e.target.value })} className={inputClass}>
-              <option value="colombia">Colombia</option>
-              <option value="venezuela">Venezuela</option>
-            </select>
+            <input type="hidden" value="colombia" />
             <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className={inputClass} />
             <input type="time" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} className={inputClass} />
             <input placeholder="URL de transmision (opcional)" value={form.stream_url} onChange={(e) => setForm({ ...form, stream_url: e.target.value })} className={inputClass} />
@@ -304,7 +303,6 @@ function EventsPanel({ events, players, reload, showMsg, loadPlayers }: {
             <button onClick={() => setExpanded(expanded === event.id ? null : event.id)} className="w-full text-left p-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-[#b8860b]/20 text-[#ffd700]">{event.country === "venezuela" ? "VEN" : "COL"}</span>
                   <div>
                     <p className="font-bold text-white text-sm">{event.name}</p>
                     <p className="text-xs text-gray-500">{event.date} {(() => { const [h, m] = event.time.split(":").map(Number); return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`; })()} - {event.location}</p>
@@ -554,14 +552,27 @@ interface UserBet {
   odds: number; potential_win: number; status: string; ticket_code: string;
   created_at: string; event_name: string; player_name: string;
 }
+interface UserDeposit {
+  id: number; user_id: number; amount: number; method: string;
+  reference: string; status: string; created_at: string;
+}
+interface UserWithdrawal {
+  id: number; user_id: number; amount: number; method: string;
+  account_number: string; status: string; created_at: string;
+}
 
 function UsersPanel({ users, reload, showMsg }: {
   users: UserData[]; reload: () => void; showMsg: (m: string) => void;
 }) {
   const formatCOP = (n: number) => n.toLocaleString("es-CO");
   const [expandedUser, setExpandedUser] = useState<number | null>(null);
+  const [activeTab, setActiveTab] = useState<"info" | "bets" | "deposits" | "withdrawals">("info");
   const [userBets, setUserBets] = useState<UserBet[]>([]);
-  const [loadingBets, setLoadingBets] = useState(false);
+  const [userDeposits, setUserDeposits] = useState<UserDeposit[]>([]);
+  const [userWithdrawals, setUserWithdrawals] = useState<UserWithdrawal[]>([]);
+  const [loadingData, setLoadingData] = useState(false);
+  const [resetUser, setResetUser] = useState<number | null>(null);
+  const [newPw, setNewPw] = useState("");
 
   const toggleActive = async (id: number, is_active: boolean) => {
     try {
@@ -571,15 +582,22 @@ function UsersPanel({ users, reload, showMsg }: {
     } catch { showMsg("Error al actualizar"); }
   };
 
-  const handleDoubleClick = async (userId: number) => {
-    if (expandedUser === userId) { setExpandedUser(null); setUserBets([]); return; }
+  const handleExpand = async (userId: number) => {
+    if (expandedUser === userId) { setExpandedUser(null); return; }
     setExpandedUser(userId);
-    setLoadingBets(true);
+    setActiveTab("info");
+    setLoadingData(true);
     try {
-      const bets = await api.getUserBets(userId);
+      const [bets, deposits, withdrawals] = await Promise.all([
+        api.getUserBets(userId),
+        api.getUserDeposits(userId),
+        api.getUserWithdrawals(userId),
+      ]);
       setUserBets(bets);
-    } catch { showMsg("Error al cargar apuestas"); }
-    setLoadingBets(false);
+      setUserDeposits(deposits);
+      setUserWithdrawals(withdrawals);
+    } catch { showMsg("Error al cargar datos del usuario"); }
+    setLoadingData(false);
   };
 
   const formatDate = (d: string) => {
@@ -591,65 +609,181 @@ function UsersPanel({ users, reload, showMsg }: {
     if (s === "pending") return <span className="text-yellow-400">Pendiente</span>;
     if (s === "won") return <span className="text-green-400">Ganada</span>;
     if (s === "lost") return <span className="text-red-400">Perdida</span>;
+    if (s === "approved") return <span className="text-green-400">Aprobado</span>;
+    if (s === "rejected") return <span className="text-red-400">Rechazado</span>;
     return <span className="text-gray-400">{s}</span>;
   };
 
   return (
     <div className="space-y-4">
       <h2 className="font-bold text-white">Usuarios ({users.length})</h2>
-      <p className="text-xs text-gray-500">Toca dos veces en un usuario para ver su historial de apuestas</p>
+      <p className="text-xs text-gray-500">Toca en un usuario para ver su informacion completa, depositos, retiros y apuestas</p>
       <div className="space-y-2">
         {users.map((u) => (
           <div key={u.id}>
             <div
-              onDoubleClick={() => handleDoubleClick(u.id)}
-              className={`card-dark rounded-xl p-3 flex items-center justify-between cursor-pointer transition ${
+              onClick={() => handleExpand(u.id)}
+              className={`card-dark rounded-xl p-3 cursor-pointer transition ${
                 expandedUser === u.id ? "!border-[#ffd700] bg-[#ffd700]/5" : "hover:border-gray-600"
               }`}
             >
-              <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${
-                  u.is_admin ? "gold-gradient text-black" : "bg-[#1a1a1a] text-gray-400"
-                }`}>
-                  {u.username.charAt(0).toUpperCase()}
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <p className="font-semibold text-white text-sm">{u.full_name || u.username}</p>
-                    {u.is_admin && <span className="text-xs bg-[#b8860b]/20 text-[#ffd700] px-1.5 py-0.5 rounded">ADMIN</span>}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${
+                    u.is_admin ? "gold-gradient text-black" : "bg-[#1a1a1a] text-gray-400"
+                  }`}>
+                    {(u.full_name || u.username).charAt(0).toUpperCase()}
                   </div>
-                  <p className="text-xs text-gray-500">{u.email} - Saldo: ${formatCOP(u.balance)} COP</p>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-white text-sm">{u.full_name || u.username}</p>
+                      {u.is_admin && <span className="text-xs bg-[#b8860b]/20 text-[#ffd700] px-1.5 py-0.5 rounded">ADMIN</span>}
+                    </div>
+                    <p className="text-xs text-gray-500">@{u.username} - {u.email}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="text-right mr-2 hidden sm:block">
+                    <p className="text-sm font-bold text-[#ffd700]">${formatCOP(u.balance)}</p>
+                    <p className="text-xs text-gray-500">COP</p>
+                  </div>
+                  <button onClick={(e) => { e.stopPropagation(); setResetUser(resetUser === u.id ? null : u.id); }}
+                    className="px-2 py-1 text-xs rounded-full bg-[#b8860b]/20 text-[#ffd700] hover:bg-[#b8860b]/30" title="Restablecer contrasena">
+                    <Key size={12} />
+                  </button>
+                  <button onClick={(e) => { e.stopPropagation(); toggleActive(u.id, u.is_active); }}
+                    className={`px-3 py-1 text-xs rounded-full ${u.is_active ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}>
+                    {u.is_active ? "Activo" : "Inactivo"}
+                  </button>
+                  {expandedUser === u.id ? <ChevronUp size={16} className="text-gray-500" /> : <ChevronDown size={16} className="text-gray-500" />}
                 </div>
               </div>
-              <button onClick={(e) => { e.stopPropagation(); toggleActive(u.id, u.is_active); }}
-                className={`px-3 py-1 text-xs rounded-full ${u.is_active ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}>
-                {u.is_active ? "Activo" : "Inactivo"}
-              </button>
             </div>
+            {resetUser === u.id && (
+              <div className="px-4 py-2 flex items-center gap-2">
+                <input type="password" placeholder="Nueva contrasena (min 6 caracteres)" value={newPw}
+                  onChange={(e) => setNewPw(e.target.value)}
+                  className="flex-1 bg-[#0a0a0a] border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:border-[#b8860b] focus:outline-none" />
+                <button onClick={async () => {
+                  if (newPw.length < 6) { showMsg("La contrasena debe tener al menos 6 caracteres"); return; }
+                  try { await api.adminResetPassword(u.id, newPw); showMsg(`Contrasena de ${u.username} restablecida`); setResetUser(null); setNewPw(""); }
+                  catch (err) { showMsg(err instanceof Error ? err.message : "Error"); }
+                }} className="px-3 py-2 text-xs gold-gradient text-black rounded-lg font-medium">Restablecer</button>
+                <button onClick={() => { setResetUser(null); setNewPw(""); }} className="px-3 py-2 text-xs text-gray-400 border border-gray-700 rounded-lg">Cancelar</button>
+              </div>
+            )}
             {expandedUser === u.id && (
-              <div className="ml-4 mt-1 mb-2 space-y-1">
-                <p className="text-xs text-[#ffd700] font-medium mb-2">Historial de Apuestas - @{u.username}</p>
-                {loadingBets ? (
-                  <p className="text-xs text-gray-500">Cargando apuestas...</p>
-                ) : userBets.length === 0 ? (
-                  <p className="text-xs text-gray-500">Este usuario no tiene apuestas</p>
+              <div className="border border-gray-800 border-t-0 rounded-b-xl bg-[#0d0d0d] p-4 space-y-3">
+                {loadingData ? (
+                  <p className="text-xs text-gray-500 text-center py-4">Cargando datos del usuario...</p>
                 ) : (
-                  userBets.map((bet) => (
-                    <div key={bet.id} className="bg-[#111] border border-gray-800 rounded-lg p-3 flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-white font-medium">{bet.event_name}</p>
-                        <p className="text-xs text-gray-500">
-                          {bet.player_name} - Cuota: {bet.odds.toFixed(2)}x - {formatDate(bet.created_at)}
-                        </p>
-                        <p className="text-xs text-gray-600 font-mono">{bet.ticket_code}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm text-white font-bold">${formatCOP(bet.amount)} COP</p>
-                        <p className="text-xs text-gray-500">Gan: ${formatCOP(bet.potential_win)} COP</p>
-                        <p className="text-xs">{statusLabel(bet.status)}</p>
-                      </div>
+                  <>
+                    <div className="flex gap-1 bg-[#1a1a1a] rounded-lg p-1">
+                      {([
+                        { key: "info" as const, label: "Info", icon: Users },
+                        { key: "deposits" as const, label: `Depositos (${userDeposits.length})`, icon: ArrowUpCircle },
+                        { key: "withdrawals" as const, label: `Retiros (${userWithdrawals.length})`, icon: ArrowDownCircle },
+                        { key: "bets" as const, label: `Apuestas (${userBets.length})`, icon: Ticket },
+                      ]).map((t) => (
+                        <button key={t.key} onClick={() => setActiveTab(t.key)}
+                          className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs rounded-md transition ${
+                            activeTab === t.key ? "gold-gradient text-black font-medium" : "text-gray-400 hover:text-white"
+                          }`}>
+                          <t.icon size={12} />
+                          <span className="hidden sm:inline">{t.label}</span>
+                          <span className="sm:hidden">{t.key === "info" ? "Info" : t.key === "deposits" ? `Dep` : t.key === "withdrawals" ? `Ret` : `Ap`}</span>
+                        </button>
+                      ))}
                     </div>
-                  ))
+
+                    {activeTab === "info" && (
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="bg-[#111] border border-gray-800 rounded-lg p-3">
+                          <p className="text-xs text-gray-500">Nombre completo</p>
+                          <p className="text-sm text-white font-medium">{u.full_name || "Sin nombre"}</p>
+                        </div>
+                        <div className="bg-[#111] border border-gray-800 rounded-lg p-3">
+                          <p className="text-xs text-gray-500">Usuario</p>
+                          <p className="text-sm text-white font-medium">@{u.username}</p>
+                        </div>
+                        <div className="bg-[#111] border border-gray-800 rounded-lg p-3">
+                          <p className="text-xs text-gray-500">Email</p>
+                          <p className="text-sm text-white font-medium truncate">{u.email}</p>
+                        </div>
+                        <div className="bg-[#111] border border-gray-800 rounded-lg p-3">
+                          <p className="text-xs text-gray-500">Telefono</p>
+                          <p className="text-sm text-white font-medium">{u.phone || "Sin telefono"}</p>
+                        </div>
+                        <div className="bg-[#111] border border-gray-800 rounded-lg p-3">
+                          <p className="text-xs text-gray-500">Saldo actual</p>
+                          <p className="text-sm text-[#ffd700] font-bold">${formatCOP(u.balance)} COP</p>
+                        </div>
+                        <div className="bg-[#111] border border-gray-800 rounded-lg p-3">
+                          <p className="text-xs text-gray-500">Registro</p>
+                          <p className="text-sm text-white font-medium">{formatDate(u.created_at)}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {activeTab === "deposits" && (
+                      <div className="space-y-2 max-h-64 overflow-y-auto">
+                        {userDeposits.length === 0 ? (
+                          <p className="text-xs text-gray-500 text-center py-4">Sin depositos registrados</p>
+                        ) : userDeposits.map((dep) => (
+                          <div key={dep.id} className="bg-[#111] border border-gray-800 rounded-lg p-3 flex items-center justify-between">
+                            <div>
+                              <p className="text-sm text-white font-medium">${formatCOP(dep.amount)} COP</p>
+                              <p className="text-xs text-gray-500">{dep.method} - {formatDate(dep.created_at)}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-xs">{statusLabel(dep.status)}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {activeTab === "withdrawals" && (
+                      <div className="space-y-2 max-h-64 overflow-y-auto">
+                        {userWithdrawals.length === 0 ? (
+                          <p className="text-xs text-gray-500 text-center py-4">Sin retiros registrados</p>
+                        ) : userWithdrawals.map((w) => (
+                          <div key={w.id} className="bg-[#111] border border-gray-800 rounded-lg p-3 flex items-center justify-between">
+                            <div>
+                              <p className="text-sm text-white font-medium">${formatCOP(w.amount)} COP</p>
+                              <p className="text-xs text-gray-500">{w.method} - {w.account_number} - {formatDate(w.created_at)}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-xs">{statusLabel(w.status)}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {activeTab === "bets" && (
+                      <div className="space-y-2 max-h-64 overflow-y-auto">
+                        {userBets.length === 0 ? (
+                          <p className="text-xs text-gray-500 text-center py-4">Sin apuestas registradas</p>
+                        ) : userBets.map((bet) => (
+                          <div key={bet.id} className="bg-[#111] border border-gray-800 rounded-lg p-3 flex items-center justify-between">
+                            <div>
+                              <p className="text-sm text-white font-medium">{bet.event_name}</p>
+                              <p className="text-xs text-gray-500">
+                                {bet.player_name} - Cuota: {bet.odds.toFixed(2)}x - {formatDate(bet.created_at)}
+                              </p>
+                              <p className="text-xs text-gray-600 font-mono">{bet.ticket_code}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm text-white font-bold">${formatCOP(bet.amount)} COP</p>
+                              <p className="text-xs text-gray-500">Gan: ${formatCOP(bet.potential_win)} COP</p>
+                              <p className="text-xs">{statusLabel(bet.status)}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             )}
@@ -939,6 +1073,91 @@ function PromotionsPanel({ showMsg }: { showMsg: (m: string) => void }) {
           {sending ? "Enviando..." : "Enviar Promocion a Todos los Usuarios"}
         </button>
       </div>
+    </div>
+  );
+}
+
+/* === BACKUPS === */
+interface BackupInfo {
+  name: string; path: string; size_kb: number;
+}
+
+function BackupsPanel({ showMsg }: { showMsg: (m: string) => void }) {
+  const [backups, setBackups] = useState<BackupInfo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [restoring, setRestoring] = useState<string | null>(null);
+
+  const loadBackups = async () => {
+    try {
+      const res = await api.getBackups();
+      setBackups(res.backups || []);
+    } catch { showMsg("Error al cargar backups"); }
+    setLoading(false);
+  };
+
+  useEffect(() => { loadBackups(); }, []);
+
+  const handleCreate = async () => {
+    setCreating(true);
+    try {
+      await api.createBackup();
+      showMsg("Backup creado exitosamente");
+      loadBackups();
+    } catch { showMsg("Error al crear backup"); }
+    setCreating(false);
+  };
+
+  const handleRestore = async (name: string) => {
+    if (!confirm(`Restaurar base de datos desde ${name}? Se creara un backup del estado actual antes de restaurar.`)) return;
+    setRestoring(name);
+    try {
+      await api.restoreBackup(name);
+      showMsg(`Base de datos restaurada desde ${name}`);
+      loadBackups();
+    } catch { showMsg("Error al restaurar backup"); }
+    setRestoring(null);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Database size={18} className="text-[#ffd700]" />
+          <h2 className="font-bold text-white">Backups de Base de Datos</h2>
+        </div>
+        <button onClick={handleCreate} disabled={creating}
+          className="flex items-center gap-1 px-3 py-1.5 text-xs gold-gradient text-black rounded-lg font-medium disabled:opacity-50">
+          <Download size={14} />
+          {creating ? "Creando..." : "Crear Backup"}
+        </button>
+      </div>
+      <p className="text-xs text-gray-400">
+        Los backups se crean automaticamente al iniciar el servidor. Se mantienen los ultimos 20 backups.
+        Puedes crear backups manuales y restaurar desde cualquier backup disponible.
+      </p>
+
+      {loading ? (
+        <div className="text-center py-8 text-gray-500">Cargando backups...</div>
+      ) : backups.length === 0 ? (
+        <div className="text-center py-8 text-gray-500">No hay backups disponibles</div>
+      ) : (
+        <div className="space-y-2">
+          {backups.map((b) => (
+            <div key={b.name} className="card-dark rounded-xl p-3 flex items-center justify-between">
+              <div>
+                <p className="text-sm text-white font-medium">{b.name}</p>
+                <p className="text-xs text-gray-500">{b.size_kb} KB</p>
+              </div>
+              <button onClick={() => handleRestore(b.name)} disabled={restoring === b.name}
+                className="flex items-center gap-1 px-3 py-1.5 text-xs bg-[#1a1a1a] border border-gray-700 text-gray-300 rounded-lg hover:border-[#b8860b]/50 hover:text-[#ffd700] transition disabled:opacity-50">
+                <Upload size={12} />
+                {restoring === b.name ? "Restaurando..." : "Restaurar"}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
