@@ -347,33 +347,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* Main */}
       <main className="max-w-7xl mx-auto px-4 py-6">{children}</main>
 
-      {/* Footer */}
-      <footer className="border-t border-[#b8860b]/20 bg-[#0d0d0d] mt-12">
-        <div className="max-w-7xl mx-auto px-4 py-8">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <img src="/logo.jpg" alt="Club del Coleo" className="h-8 w-8 rounded-full" />
-              <span className="text-sm gold-text font-bold">Club del Coleo</span>
-            </div>
-            <div className="flex flex-wrap justify-center gap-4 text-xs text-gray-500">
-              <span className="flex items-center gap-1">
-                <Shield size={12} className="text-[#b8860b]" />
-                Plataforma Certificada
-              </span>
-              <span>|</span>
-              <span>Juego Responsable</span>
-              <span>|</span>
-              <span>Datos Protegidos con SSL</span>
-              <span>|</span>
-              <span>+18 Solo Mayores de Edad</span>
-            </div>
-          </div>
-          <p className="text-center text-xs text-gray-600 mt-4">
-            &copy; 2026 Club del Coleo. Todos los derechos reservados. Apuesta con responsabilidad.
-          </p>
-        </div>
-      </footer>
-
       {/* Mobile bottom nav */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 bg-[#0d0d0d] border-t border-[#b8860b]/30 z-50">
         <div className="flex justify-around py-2">
