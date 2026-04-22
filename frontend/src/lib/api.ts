@@ -113,8 +113,23 @@ export const api = {
 
   // Wallet
   getWallet: () => request("/api/wallet"),
-  deposit: (data: { amount: number; method: string; reference: string }) =>
-    request("/api/wallet/deposit", { method: "POST", body: JSON.stringify(data) }),
+  deposit: (data: { amount: number; method: string; comprobante: File }) => {
+    const formData = new FormData();
+    formData.append("amount", String(data.amount));
+    formData.append("method", data.method);
+    formData.append("comprobante", data.comprobante);
+    const token = localStorage.getItem("token");
+    const headers: Record<string, string> = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    return fetch(`${API_URL}/api/wallet/deposit`, { method: "POST", body: formData, headers }).then(async (res) => {
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        if (res.status === 401) { localStorage.removeItem("token"); localStorage.removeItem("user"); window.location.href = "/login"; }
+        throw new Error(d.detail || `Error ${res.status}`);
+      }
+      return res.json();
+    });
+  },
   getMyDeposits: () => request("/api/wallet/deposits"),
   withdraw: (data: { amount: number; method: string; account_number: string }) =>
     request("/api/wallet/withdraw", { method: "POST", body: JSON.stringify(data) }),

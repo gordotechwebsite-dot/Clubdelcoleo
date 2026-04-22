@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
-import { Wallet, ArrowUpCircle, ArrowDownCircle, Clock, CreditCard, Smartphone, Building2, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
+import { Wallet, ArrowUpCircle, ArrowDownCircle, Clock, CreditCard, Smartphone, Building2, CheckCircle2, XCircle, AlertCircle, Upload, ImageIcon } from "lucide-react";
 
 interface Transaction {
   id: number; type: string; amount: number; method: string; reference: string;
@@ -30,7 +30,7 @@ export default function WalletPage() {
   const [activeTab, setActiveTab] = useState<WalletTab>("depositar");
   const [method, setMethod] = useState("");
   const [amount, setAmount] = useState("");
-  const [reference, setReference] = useState("");
+  const [comprobante, setComprobante] = useState<File | null>(null);
   const [depositing, setDepositing] = useState(false);
   const [wMethod, setWMethod] = useState("");
   const [wAmount, setWAmount] = useState("");
@@ -57,12 +57,12 @@ export default function WalletPage() {
     const amt = parseFloat(amount);
     if (!method) { setError("Selecciona un metodo de pago"); return; }
     if (isNaN(amt) || amt < 5000) { setError("Deposito minimo: $5,000 COP"); return; }
-    if (!reference.trim()) { setError("Ingresa el numero de referencia"); return; }
+    if (!comprobante) { setError("Sube el comprobante de pago"); return; }
     setError(""); setDepositing(true);
     try {
-      await api.deposit({ amount: amt, method, reference: reference.trim() });
+      await api.deposit({ amount: amt, method, comprobante });
       setSuccess("Solicitud de recarga enviada. Pendiente de aprobacion.");
-      setAmount(""); setReference(""); setMethod(""); setActiveTab("solicitudes");
+      setAmount(""); setComprobante(null); setMethod(""); setActiveTab("solicitudes");
       loadWallet();
       setTimeout(() => setSuccess(""), 6000);
     } catch (err) { setError(err instanceof Error ? err.message : "Error en la recarga"); } finally { setDepositing(false); }
@@ -186,10 +186,27 @@ export default function WalletPage() {
             </div>
           </div>
           <div>
-            <label className="block text-xs text-gray-400 mb-1">Numero de Referencia / Comprobante</label>
-            <input type="text" value={reference} onChange={(e) => setReference(e.target.value)}
-              className="w-full bg-[#0a0a0a] border border-gray-700 rounded-lg px-4 py-3 text-white text-sm focus:border-[#b8860b] focus:outline-none"
-              placeholder="Ej: 123456789" />
+            <label className="block text-xs text-gray-400 mb-1">Comprobante de Pago</label>
+            <label className={`flex items-center justify-center gap-2 w-full border-2 border-dashed rounded-lg px-4 py-4 cursor-pointer transition ${
+              comprobante ? "border-[#b8860b] bg-[#b8860b]/10" : "border-gray-700 bg-[#0a0a0a] hover:border-gray-500"
+            }`}>
+              <input type="file" accept="image/*,.pdf" className="hidden"
+                onChange={(e) => { if (e.target.files?.[0]) setComprobante(e.target.files[0]); }} />
+              {comprobante ? (
+                <>
+                  <ImageIcon size={18} className="text-[#ffd700]" />
+                  <span className="text-sm text-[#ffd700] font-medium truncate">{comprobante.name}</span>
+                  <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setComprobante(null); }}
+                    className="text-red-400 hover:text-red-300 ml-2"><XCircle size={16} /></button>
+                </>
+              ) : (
+                <>
+                  <Upload size={20} className="text-gray-500" />
+                  <span className="text-sm text-gray-500">Toca para subir foto o captura del pago</span>
+                </>
+              )}
+            </label>
+            <p className="text-xs text-gray-600 mt-1">JPG, PNG, WebP o PDF</p>
           </div>
           {error && <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-xs rounded-lg p-2 text-center">{error}</div>}
           <button onClick={handleDeposit} disabled={depositing}
@@ -258,7 +275,7 @@ export default function WalletPage() {
                       <ArrowUpCircle size={18} className="text-green-400" />
                       <div>
                         <p className="text-sm text-white font-medium">${dep.amount.toLocaleString("es-CO")} COP</p>
-                        <p className="text-xs text-gray-500">{methodLabel(dep.method)} - Ref: {dep.reference} - {formatDate(dep.created_at)}</p>
+                        <p className="text-xs text-gray-500">{methodLabel(dep.method)} - {dep.reference?.startsWith("/comprobantes/") ? <a href={`${import.meta.env.VITE_API_URL || ""}${dep.reference}`} target="_blank" rel="noopener noreferrer" className="text-[#ffd700] underline">Ver comprobante</a> : dep.reference} - {formatDate(dep.created_at)}</p>
                       </div>
                     </div>
                     {statusBadge(dep.status)}
