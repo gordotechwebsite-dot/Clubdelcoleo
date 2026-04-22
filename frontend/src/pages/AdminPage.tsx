@@ -392,7 +392,7 @@ function EventsPanel({ events, players, reload, showMsg, loadPlayers }: {
                       <select value={addPlayer.playerId} onChange={(e) => setAddPlayer({ ...addPlayer, playerId: e.target.value })}
                         className="flex-1 bg-[#1a1a1a] border border-gray-700 rounded text-xs text-white p-1.5">
                         <option value="">Seleccionar jugador</option>
-                        {players.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.nickname})</option>)}
+                        {players.map((p) => <option key={p.id} value={p.id}>{p.name}{p.nickname ? ` (${p.nickname})` : ""}</option>)}
                       </select>
                       <input placeholder="Cuota" value={addPlayer.odds} onChange={(e) => setAddPlayer({ ...addPlayer, odds: e.target.value })}
                         className="w-20 bg-[#1a1a1a] border border-gray-700 rounded text-xs text-white p-1.5" />
@@ -526,7 +526,7 @@ function PlayersPanel({ players, reload, showMsg }: {
               </div>
               <div>
                 <p className="font-semibold text-white text-sm">{p.name}</p>
-                <p className="text-xs text-gray-500">&quot;{p.nickname}&quot; - {p.team}</p>
+                {p.nickname ? <p className="text-xs text-gray-500">"{p.nickname}"</p> : null}
               </div>
             </div>
             <div className="flex items-center gap-3">
