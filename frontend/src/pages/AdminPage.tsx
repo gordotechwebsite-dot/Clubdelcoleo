@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { api } from "../lib/api";
 import {
   Shield, Users, Calendar, Trophy, BarChart3, Ticket, Plus, Trash2, Save,
@@ -58,8 +58,8 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState("");
 
-  const loadTab = async (t: Tab) => {
-    setLoading(true);
+  const loadTab = useCallback(async (t: Tab, silent = false) => {
+    if (!silent) setLoading(true);
     try {
       if (t === "stats") { const s = await api.getStats(); setStats(s); }
       else if (t === "events") {
@@ -74,10 +74,19 @@ export default function AdminPage() {
       else if (t === "deposits") { const d = await api.getAdminDeposits(); setAdminDeposits(d); }
       else if (t === "withdrawals") { const w = await api.getAdminWithdrawals(); setAdminWithdrawals(w); }
     } catch (err) { console.error(err); }
-    setLoading(false);
-  };
+    if (!silent) setLoading(false);
+  }, []);
 
-  useEffect(() => { loadTab(tab); }, [tab]);
+  // Load on tab change
+  useEffect(() => { loadTab(tab); }, [tab, loadTab]);
+
+  // Auto-refresh every 10 seconds
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => {
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    intervalRef.current = setInterval(() => { loadTab(tab, true); }, 10000);
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, [tab, loadTab]);
 
   const showMsg = (m: string) => { setMsg(m); setTimeout(() => setMsg(""), 3000); };
 
