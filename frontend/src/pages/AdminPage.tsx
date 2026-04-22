@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { api } from "../lib/api";
 import {
   Shield, Users, Calendar, Trophy, BarChart3, Ticket, Plus, Trash2, Save,
-  X, ChevronDown, ChevronUp, Radio, RefreshCw, ArrowUpCircle, ArrowDownCircle, CheckCircle2, XCircle, Crown, Megaphone, Send,
+  X, ChevronDown, ChevronUp, Radio, RefreshCw, ArrowUpCircle, ArrowDownCircle, CheckCircle2, XCircle, Crown, Megaphone, Send, Database, Key, Download, Upload,
 } from "lucide-react";
 
 interface Event {
@@ -43,7 +43,7 @@ interface WithdrawalReq {
   account_number: string; status: string; created_at: string;
 }
 
-type Tab = "stats" | "events" | "players" | "users" | "bets" | "invites" | "deposits" | "withdrawals" | "promotions";
+type Tab = "stats" | "events" | "players" | "users" | "bets" | "invites" | "deposits" | "withdrawals" | "promotions" | "backups";
 
 export default function AdminPage() {
   const [tab, setTab] = useState<Tab>("stats");
@@ -100,6 +100,7 @@ export default function AdminPage() {
     { key: "bets", label: "Apuestas", icon: Ticket },
     { key: "invites", label: "Invitaciones", icon: Shield },
     { key: "promotions", label: "Promociones", icon: Megaphone },
+    { key: "backups", label: "Backups", icon: Database },
   ];
 
   return (
@@ -141,6 +142,7 @@ export default function AdminPage() {
           {tab === "withdrawals" && <WithdrawalsPanel withdrawals={adminWithdrawals} reload={() => loadTab("withdrawals")} showMsg={showMsg} />}
           {tab === "invites" && <InvitesPanel invites={invites} reload={() => loadTab("invites")} showMsg={showMsg} />}
           {tab === "promotions" && <PromotionsPanel showMsg={showMsg} />}
+          {tab === "backups" && <BackupsPanel showMsg={showMsg} />}
         </>
       )}
     </div>
@@ -562,6 +564,8 @@ function UsersPanel({ users, reload, showMsg }: {
   const [expandedUser, setExpandedUser] = useState<number | null>(null);
   const [userBets, setUserBets] = useState<UserBet[]>([]);
   const [loadingBets, setLoadingBets] = useState(false);
+  const [resetUser, setResetUser] = useState<number | null>(null);
+  const [newPw, setNewPw] = useState("");
 
   const toggleActive = async (id: number, is_active: boolean) => {
     try {
@@ -621,11 +625,30 @@ function UsersPanel({ users, reload, showMsg }: {
                   <p className="text-xs text-gray-500">{u.email} - Saldo: ${formatCOP(u.balance)} COP</p>
                 </div>
               </div>
-              <button onClick={(e) => { e.stopPropagation(); toggleActive(u.id, u.is_active); }}
-                className={`px-3 py-1 text-xs rounded-full ${u.is_active ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}>
-                {u.is_active ? "Activo" : "Inactivo"}
-              </button>
+              <div className="flex items-center gap-2">
+                <button onClick={(e) => { e.stopPropagation(); setResetUser(resetUser === u.id ? null : u.id); }}
+                  className="px-2 py-1 text-xs rounded-full bg-[#b8860b]/20 text-[#ffd700] hover:bg-[#b8860b]/30" title="Restablecer contrasena">
+                  <Key size={12} />
+                </button>
+                <button onClick={(e) => { e.stopPropagation(); toggleActive(u.id, u.is_active); }}
+                  className={`px-3 py-1 text-xs rounded-full ${u.is_active ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}>
+                  {u.is_active ? "Activo" : "Inactivo"}
+                </button>
+              </div>
             </div>
+            {resetUser === u.id && (
+              <div className="px-4 pb-3 flex items-center gap-2">
+                <input type="password" placeholder="Nueva contrasena (min 6 caracteres)" value={newPw}
+                  onChange={(e) => setNewPw(e.target.value)}
+                  className="flex-1 bg-[#0a0a0a] border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:border-[#b8860b] focus:outline-none" />
+                <button onClick={async () => {
+                  if (newPw.length < 6) { showMsg("La contrasena debe tener al menos 6 caracteres"); return; }
+                  try { await api.adminResetPassword(u.id, newPw); showMsg(`Contrasena de ${u.username} restablecida`); setResetUser(null); setNewPw(""); }
+                  catch (err) { showMsg(err instanceof Error ? err.message : "Error"); }
+                }} className="px-3 py-2 text-xs gold-gradient text-black rounded-lg font-medium">Restablecer</button>
+                <button onClick={() => { setResetUser(null); setNewPw(""); }} className="px-3 py-2 text-xs text-gray-400 border border-gray-700 rounded-lg">Cancelar</button>
+              </div>
+            )}
             {expandedUser === u.id && (
               <div className="ml-4 mt-1 mb-2 space-y-1">
                 <p className="text-xs text-[#ffd700] font-medium mb-2">Historial de Apuestas - @{u.username}</p>
@@ -939,6 +962,91 @@ function PromotionsPanel({ showMsg }: { showMsg: (m: string) => void }) {
           {sending ? "Enviando..." : "Enviar Promocion a Todos los Usuarios"}
         </button>
       </div>
+    </div>
+  );
+}
+
+/* === BACKUPS === */
+interface BackupInfo {
+  name: string; path: string; size_kb: number;
+}
+
+function BackupsPanel({ showMsg }: { showMsg: (m: string) => void }) {
+  const [backups, setBackups] = useState<BackupInfo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [restoring, setRestoring] = useState<string | null>(null);
+
+  const loadBackups = async () => {
+    try {
+      const res = await api.getBackups();
+      setBackups(res.backups || []);
+    } catch { showMsg("Error al cargar backups"); }
+    setLoading(false);
+  };
+
+  useEffect(() => { loadBackups(); }, []);
+
+  const handleCreate = async () => {
+    setCreating(true);
+    try {
+      await api.createBackup();
+      showMsg("Backup creado exitosamente");
+      loadBackups();
+    } catch { showMsg("Error al crear backup"); }
+    setCreating(false);
+  };
+
+  const handleRestore = async (name: string) => {
+    if (!confirm(`Restaurar base de datos desde ${name}? Se creara un backup del estado actual antes de restaurar.`)) return;
+    setRestoring(name);
+    try {
+      await api.restoreBackup(name);
+      showMsg(`Base de datos restaurada desde ${name}`);
+      loadBackups();
+    } catch { showMsg("Error al restaurar backup"); }
+    setRestoring(null);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Database size={18} className="text-[#ffd700]" />
+          <h2 className="font-bold text-white">Backups de Base de Datos</h2>
+        </div>
+        <button onClick={handleCreate} disabled={creating}
+          className="flex items-center gap-1 px-3 py-1.5 text-xs gold-gradient text-black rounded-lg font-medium disabled:opacity-50">
+          <Download size={14} />
+          {creating ? "Creando..." : "Crear Backup"}
+        </button>
+      </div>
+      <p className="text-xs text-gray-400">
+        Los backups se crean automaticamente al iniciar el servidor. Se mantienen los ultimos 20 backups.
+        Puedes crear backups manuales y restaurar desde cualquier backup disponible.
+      </p>
+
+      {loading ? (
+        <div className="text-center py-8 text-gray-500">Cargando backups...</div>
+      ) : backups.length === 0 ? (
+        <div className="text-center py-8 text-gray-500">No hay backups disponibles</div>
+      ) : (
+        <div className="space-y-2">
+          {backups.map((b) => (
+            <div key={b.name} className="card-dark rounded-xl p-3 flex items-center justify-between">
+              <div>
+                <p className="text-sm text-white font-medium">{b.name}</p>
+                <p className="text-xs text-gray-500">{b.size_kb} KB</p>
+              </div>
+              <button onClick={() => handleRestore(b.name)} disabled={restoring === b.name}
+                className="flex items-center gap-1 px-3 py-1.5 text-xs bg-[#1a1a1a] border border-gray-700 text-gray-300 rounded-lg hover:border-[#b8860b]/50 hover:text-[#ffd700] transition disabled:opacity-50">
+                <Upload size={12} />
+                {restoring === b.name ? "Restaurando..." : "Restaurar"}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

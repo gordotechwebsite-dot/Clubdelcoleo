@@ -95,6 +95,12 @@ export default function LoginPage() {
               Registrate con invitacion
             </Link>
           </p>
+
+          <p className="text-center text-sm text-gray-500">
+            <Link to="/forgot-password" className="text-gray-400 hover:text-[#daa520] transition">
+              Olvidaste tu contrasena?
+            </Link>
+          </p>
         </form>
 
         <div className="flex items-center justify-center gap-4 mt-6 text-xs text-gray-600">

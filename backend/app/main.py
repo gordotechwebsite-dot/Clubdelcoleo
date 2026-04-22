@@ -21,7 +21,7 @@ def now_colombia() -> datetime:
     """Get current datetime in Colombia timezone."""
     return datetime.now(COLOMBIA_TZ)
 
-from app.database import get_db, init_db
+from app.database import get_db, init_db, create_backup, list_backups, restore_backup, auto_restore_if_empty
 from app.auth import (
     hash_password, verify_password, create_token,
     get_current_user, get_admin_user, get_user_from_token_str
@@ -76,6 +76,12 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup():
     init_db()
+    # Auto-restore from backup if DB is empty
+    auto_restore_if_empty()
+    # Re-run init_db after restore to ensure schema is up to date
+    init_db()
+    # Create a startup backup
+    create_backup("startup")
     # Set up Telegram bot webhook if configured
     if telegram_bot.is_configured():
         backend_url = os.environ.get("BACKEND_PUBLIC_URL", "")
@@ -1421,3 +1427,124 @@ async def seed_data(user=Depends(get_admin_user)):
             )
 
         return {"message": "Datos de ejemplo creados exitosamente"}
+
+
+# ==================== BACKUP SYSTEM ====================
+
+@app.get("/api/admin/backups")
+async def get_backups(user=Depends(get_admin_user)):
+    """List all available database backups."""
+    backups = list_backups()
+    return {"backups": backups}
+
+
+@app.post("/api/admin/backups")
+async def create_manual_backup(user=Depends(get_admin_user)):
+    """Create a manual database backup."""
+    path = create_backup("manual")
+    if not path:
+        raise HTTPException(status_code=500, detail="No se pudo crear el backup")
+    return {"message": "Backup creado exitosamente", "path": path}
+
+
+@app.post("/api/admin/backups/restore")
+async def restore_from_backup(data: dict, user=Depends(get_admin_user)):
+    """Restore database from a backup."""
+    backup_name = data.get("name", "")
+    if not backup_name:
+        raise HTTPException(status_code=400, detail="Nombre de backup requerido")
+    backups = list_backups()
+    backup = next((b for b in backups if b["name"] == backup_name), None)
+    if not backup:
+        raise HTTPException(status_code=404, detail="Backup no encontrado")
+    success = restore_backup(backup["path"])
+    if not success:
+        raise HTTPException(status_code=500, detail="Error al restaurar el backup")
+    return {"message": f"Base de datos restaurada desde {backup_name}"}
+
+
+# ==================== PASSWORD RECOVERY ====================
+
+class PasswordResetRequest(BaseModel):
+    username_or_email: str
+
+
+class AdminResetPassword(BaseModel):
+    new_password: str
+
+
+@app.post("/api/auth/password-reset-request")
+async def request_password_reset(data: PasswordResetRequest):
+    """User requests a password reset. Notifies admin via Telegram."""
+    with get_db() as conn:
+        user = conn.execute(
+            "SELECT id, username, email, full_name, phone FROM users WHERE username = ? OR email = ?",
+            (data.username_or_email, data.username_or_email)
+        ).fetchone()
+        if not user:
+            # Don't reveal if user exists or not
+            return {"message": "Si tu cuenta existe, el administrador recibira tu solicitud de recuperacion."}
+
+        user = dict(user)
+
+        # Store the reset request in notifications for admin
+        conn.execute(
+            """INSERT INTO notifications (user_id, title, message, type)
+               VALUES (?, ?, ?, ?)""",
+            (1,  # admin user id
+             "Solicitud de recuperacion de contrasena",
+             f"El usuario {user['username']} ({user['email']}) solicita restablecer su contrasena. Telefono: {user.get('phone', 'N/A')}",
+             "password_reset")
+        )
+
+    # Notify admin via Telegram
+    if telegram_bot.is_configured():
+        await telegram_bot.send_message(
+            telegram_bot.TELEGRAM_ADMIN_CHAT_ID,
+            f"<b>Solicitud de Recuperacion de Contrasena</b>\n\n"
+            f"<b>Usuario:</b> {user['username']}\n"
+            f"<b>Email:</b> {user['email']}\n"
+            f"<b>Nombre:</b> {user['full_name']}\n"
+            f"<b>Telefono:</b> {user.get('phone', 'N/A')}\n\n"
+            f"Para restablecer, ve al panel admin > Usuarios"
+        )
+
+    # SSE notify admins
+    await broadcast_to_admins("password_reset_request", {
+        "title": "Recuperacion de contrasena",
+        "message": f"{user['username']} solicita restablecer su contrasena",
+    })
+
+    return {"message": "Si tu cuenta existe, el administrador recibira tu solicitud de recuperacion."}
+
+
+@app.put("/api/admin/users/{user_id}/reset-password")
+async def admin_reset_password(user_id: int, data: AdminResetPassword, admin=Depends(get_admin_user)):
+    """Admin resets a user's password."""
+    if len(data.new_password) < 6:
+        raise HTTPException(status_code=400, detail="La contrasena debe tener al menos 6 caracteres")
+    with get_db() as conn:
+        user = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        if not user:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+        new_hash = hash_password(data.new_password)
+        conn.execute("UPDATE users SET password_hash = ? WHERE id = ?", (new_hash, user_id))
+
+        # Notify user that their password was reset
+        conn.execute(
+            """INSERT INTO notifications (user_id, title, message, type)
+               VALUES (?, ?, ?, ?)""",
+            (user_id,
+             "Contrasena restablecida",
+             "Tu contrasena ha sido restablecida por el administrador. Inicia sesion con tu nueva contrasena.",
+             "info")
+        )
+
+    # SSE notify the user
+    await broadcast_to_user(user_id, "password_reset", {
+        "title": "Contrasena restablecida",
+        "message": "Tu contrasena ha sido restablecida. Inicia sesion nuevamente.",
+    })
+
+    return {"message": f"Contrasena de {user['username']} restablecida exitosamente"}

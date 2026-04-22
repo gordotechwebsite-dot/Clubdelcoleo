@@ -12,6 +12,7 @@ import WalletPage from "./pages/WalletPage";
 import MyBetsPage from "./pages/MyBetsPage";
 import AdminPage from "./pages/AdminPage";
 import ProfilePage from "./pages/ProfilePage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 
 function PublicRoute({ children }: { children: React.ReactNode }) {
   const user = getUser();
@@ -38,6 +39,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<PublicRoute><LandingPage /></PublicRoute>} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/home" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
         <Route path="/events" element={<ProtectedRoute><EventsPage /></ProtectedRoute>} />
