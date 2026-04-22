@@ -671,6 +671,21 @@ async def list_all_bets(user=Depends(get_admin_user)):
         return [dict(b) for b in bets]
 
 
+@app.get("/api/admin/users/{user_id}/bets")
+async def get_user_bets(user_id: int, user=Depends(get_admin_user)):
+    with get_db() as conn:
+        bets = conn.execute(
+            """SELECT b.*, e.name as event_name, p.name as player_name
+               FROM bets b
+               JOIN events e ON b.event_id = e.id
+               JOIN players p ON b.player_id = p.id
+               WHERE b.user_id = ?
+               ORDER BY b.created_at DESC""",
+            (user_id,)
+        ).fetchall()
+        return [dict(b) for b in bets]
+
+
 @app.get("/api/admin/stats")
 async def admin_stats(user=Depends(get_admin_user)):
     with get_db() as conn:

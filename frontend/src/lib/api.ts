@@ -146,6 +146,7 @@ export const api = {
   updateUser: (id: number, data: Record<string, unknown>) =>
     request(`/api/admin/users/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   getAllBets: () => request("/api/admin/bets"),
+  getUserBets: (userId: number) => request(`/api/admin/users/${userId}/bets`),
   generateInviteCodes: (count: number) =>
     request("/api/admin/invite-codes", { method: "POST", body: JSON.stringify({ count }) }),
   getInviteCodes: () => request("/api/admin/invite-codes"),
