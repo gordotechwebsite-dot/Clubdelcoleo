@@ -310,9 +310,11 @@ export default function EventDetailPage() {
                   </div>
                   <div>
                     <p className="font-semibold text-white text-sm">{player.name}</p>
-                    <p className="text-xs text-gray-500">
-                      &quot;{player.nickname}&quot; - {player.team}
-                    </p>
+                    {(player.nickname && player.nickname !== "None") && (
+                      <p className="text-xs text-gray-500">
+                        &quot;{player.nickname}&quot;
+                      </p>
+                    )}
                   </div>
                 </div>
                 <div className="text-right">
@@ -358,7 +360,7 @@ export default function EventDetailPage() {
               <div className="bg-[#b8860b]/10 rounded-lg p-3">
                 <p className="text-xs text-gray-400">Jugador seleccionado</p>
                 <p className="font-bold text-[#ffd700]">{selectedPlayer.name}</p>
-                <p className="text-xs text-gray-500">&quot;{selectedPlayer.nickname}&quot; - Cuota: {selectedPlayer.odds.toFixed(2)}x</p>
+                <p className="text-xs text-gray-500">{selectedPlayer.nickname && selectedPlayer.nickname !== "None" ? `"${selectedPlayer.nickname}" - ` : ""}Cuota: {selectedPlayer.odds.toFixed(2)}x</p>
               </div>
 
               <div>
