@@ -583,7 +583,7 @@ function UsersPanel({ users, reload, showMsg }: {
   };
 
   const formatDate = (d: string) => {
-    try { return new Date(d).toLocaleDateString("es-CO", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true }); }
+    try { return new Date(d).toLocaleDateString("es-CO", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/Bogota" }); }
     catch { return d; }
   };
 
@@ -701,7 +701,7 @@ function DepositsPanel({ deposits, reload, showMsg }: {
 }) {
   const formatCOP = (n: number) => n.toLocaleString("es-CO");
   const formatDate = (d: string) => {
-    try { return new Date(d).toLocaleDateString("es-CO", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true }); }
+    try { return new Date(d).toLocaleDateString("es-CO", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/Bogota" }); }
     catch { return d; }
   };
   const handleReview = async (id: number, status: string) => {
@@ -770,7 +770,7 @@ function WithdrawalsPanel({ withdrawals, reload, showMsg }: {
 }) {
   const formatCOP = (n: number) => n.toLocaleString("es-CO");
   const formatDate = (d: string) => {
-    try { return new Date(d).toLocaleDateString("es-CO", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true }); }
+    try { return new Date(d).toLocaleDateString("es-CO", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/Bogota" }); }
     catch { return d; }
   };
   const handleReview = async (id: number, status: string) => {
@@ -867,7 +867,7 @@ function InvitesPanel({ invites, reload, showMsg }: {
             <div>
               <p className="font-mono text-[#ffd700] font-bold text-sm tracking-wider">{inv.code}</p>
               <p className="text-xs text-gray-600 mt-0.5">
-                {new Date(inv.created_at).toLocaleDateString("es-CO", { day: "numeric", month: "short" })}
+                {new Date(inv.created_at).toLocaleDateString("es-CO", { day: "numeric", month: "short", timeZone: "America/Bogota" })}
               </p>
             </div>
             <span className={`text-xs px-2 py-0.5 rounded-full ${inv.used ? "bg-gray-500/20 text-gray-400" : "bg-green-500/20 text-green-400"}`}>

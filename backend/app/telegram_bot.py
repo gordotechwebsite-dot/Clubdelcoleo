@@ -7,6 +7,10 @@ Admin can approve or reject deposits directly from Telegram.
 import os
 import httpx
 import logging
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+COLOMBIA_TZ = ZoneInfo("America/Bogota")
 
 logger = logging.getLogger(__name__)
 
@@ -184,12 +188,16 @@ async def notify_new_deposit(
     method_names = {"nequi": "Nequi", "daviplata": "Daviplata", "bancolombia": "Bancolombia"}
     method_display = method_names.get(method, method)
 
+    now_co = datetime.now(COLOMBIA_TZ)
+    fecha_hora = now_co.strftime("%d/%m/%Y %I:%M %p")
+
     caption = (
         f"<b>Nueva Solicitud de Deposito</b>\n\n"
         f"<b>Usuario:</b> {username}\n"
         f"<b>Monto:</b> ${int(amount):,} COP\n"
         f"<b>Metodo:</b> {method_display}\n"
-        f"<b>ID Deposito:</b> #{deposit_id}\n\n"
+        f"<b>ID Deposito:</b> #{deposit_id}\n"
+        f"<b>Fecha:</b> {fecha_hora} (Hora Colombia)\n\n"
         f"Selecciona una opcion:"
     )
 

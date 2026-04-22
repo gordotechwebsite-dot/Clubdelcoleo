@@ -19,7 +19,7 @@ export default function HomePage() {
 
   const formatDate = (d: string) => {
     const date = new Date(d + "T00:00:00");
-    return date.toLocaleDateString("es-CO", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+    return date.toLocaleDateString("es-CO", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "America/Bogota" });
   };
 
   const formatTime12 = (t: string) => {
