@@ -1,7 +1,9 @@
-from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi import FastAPI, HTTPException, Depends, status, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
-from typing import List
+from fastapi.staticfiles import StaticFiles
+from typing import List, Optional
 import uuid
+import os
 from datetime import datetime, timezone, timedelta
 
 from app.database import get_db, init_db
@@ -450,14 +452,40 @@ async def get_wallet(user=Depends(get_current_user)):
         }
 
 
+# Ensure comprobantes directory exists
+COMPROBANTES_DIR = "/data/comprobantes"
+os.makedirs(COMPROBANTES_DIR, exist_ok=True)
+app.mount("/comprobantes", StaticFiles(directory=COMPROBANTES_DIR), name="comprobantes")
+
+
 @app.post("/api/wallet/deposit")
-async def deposit(req: DepositRequest, user=Depends(get_current_user)):
-    if req.amount <= 0:
+async def deposit(
+    amount: float = Form(...),
+    method: str = Form(...),
+    comprobante: UploadFile = File(...),
+    user=Depends(get_current_user),
+):
+    if amount <= 0:
         raise HTTPException(status_code=400, detail="Monto debe ser mayor a 0")
-    if req.amount < 5000:
+    if amount < 5000:
         raise HTTPException(status_code=400, detail="Deposito minimo: $5,000 COP")
-    if req.method not in ["nequi", "daviplata", "bancolombia"]:
+    if method not in ["nequi", "daviplata", "bancolombia"]:
         raise HTTPException(status_code=400, detail="Metodo de pago no valido")
+
+    # Validate file type
+    allowed_types = ["image/jpeg", "image/png", "image/webp", "image/gif", "application/pdf"]
+    if comprobante.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="Tipo de archivo no permitido. Usa JPG, PNG, WebP, GIF o PDF.")
+
+    # Save the comprobante file
+    ext = comprobante.filename.rsplit(".", 1)[-1] if "." in (comprobante.filename or "") else "jpg"
+    filename = f"{uuid.uuid4().hex}.{ext}"
+    filepath = os.path.join(COMPROBANTES_DIR, filename)
+    content = await comprobante.read()
+    with open(filepath, "wb") as f:
+        f.write(content)
+
+    reference = f"/comprobantes/{filename}"
 
     with get_db() as conn:
         # Check daily deposit limit
@@ -468,7 +496,7 @@ async def deposit(req: DepositRequest, user=Depends(get_current_user)):
                AND date(created_at) = date('now')""",
             (user["id"],)
         ).fetchone()["total"]
-        if today_deposits + req.amount > daily_limit:
+        if today_deposits + amount > daily_limit:
             raise HTTPException(
                 status_code=400,
                 detail=f"Limite diario de deposito excedido. Limite: ${int(daily_limit):,} COP. Ya depositado hoy: ${int(today_deposits):,} COP"
@@ -478,7 +506,7 @@ async def deposit(req: DepositRequest, user=Depends(get_current_user)):
         cursor = conn.execute(
             """INSERT INTO deposit_requests (user_id, amount, method, reference)
                VALUES (?, ?, ?, ?)""",
-            (user["id"], req.amount, req.method, req.reference)
+            (user["id"], amount, method, reference)
         )
 
         # Create notification for admin
@@ -487,14 +515,14 @@ async def deposit(req: DepositRequest, user=Depends(get_current_user)):
                SELECT id, 'Nueva solicitud de deposito',
                ?, 'deposit'
                FROM users WHERE is_admin = 1""",
-            (f"Solicitud de ${int(req.amount):,} COP via {req.method} de {user['username']}",)
+            (f"Solicitud de ${int(amount):,} COP via {method} de {user['username']}",)
         )
 
         return {
             "message": "Solicitud de recarga enviada. Pendiente de aprobacion por el administrador.",
             "request_id": cursor.lastrowid,
-            "amount": req.amount,
-            "method": req.method,
+            "amount": amount,
+            "method": method,
             "status": "pending",
         }
 

@@ -647,7 +647,7 @@ function DepositsPanel({ deposits, reload, showMsg }: {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-white font-bold">${formatCOP(dep.amount)} COP</p>
-                  <p className="text-xs text-gray-500">@{dep.username} - {dep.method} - Ref: {dep.reference}</p>
+                  <p className="text-xs text-gray-500">@{dep.username} - {dep.method} - {dep.reference?.startsWith("/comprobantes/") ? <a href={`${import.meta.env.VITE_API_URL || ""}${dep.reference}`} target="_blank" rel="noopener noreferrer" className="text-[#ffd700] underline">Ver comprobante</a> : `Ref: ${dep.reference}`}</p>
                   <p className="text-xs text-gray-600">{formatDate(dep.created_at)}</p>
                 </div>
                 <div className="flex gap-2">
