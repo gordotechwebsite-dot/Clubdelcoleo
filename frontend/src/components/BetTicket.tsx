@@ -43,7 +43,6 @@ export default function BetTicket({ bet }: { bet: BetData }) {
         <div className="gold-gradient p-4 text-center relative">
           <div className="absolute top-2 left-3 text-black/30 text-xs font-mono">CDC</div>
           <div className="absolute top-2 right-3 text-black/30 text-xs font-mono">CDC</div>
-          <img src="/logo-gold.png" alt="Club del Coleo" className="h-14 mx-auto mb-1" />
           <p className="text-black/60 text-xs font-medium">TALON DE APUESTA OFICIAL</p>
         </div>
 
