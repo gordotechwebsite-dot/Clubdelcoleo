@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { api, getUser, setUser } from "../lib/api";
+import { formatMoneyInput, parseMoneyInput } from "../lib/utils";
 import { Calendar, MapPin, Clock, Trophy, Star, TrendingUp, ArrowLeft, CheckCircle2, X, Search, ArrowUpDown, Crown } from "lucide-react";
 
 interface Player {
@@ -32,10 +33,12 @@ export default function EventDetailPage() {
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<"position" | "odds_asc" | "odds_desc" | "name" | "rating">("position");
-  const user = getUser();
+  const [user, setUserState] = useState(getUser());
 
   useEffect(() => {
     if (id) api.getEvent(Number(id)).then(setEvent).catch(console.error).finally(() => setLoading(false));
+    // Fetch fresh balance from server
+    api.getMe().then((me) => { setUser(me); setUserState(me); }).catch(() => {});
   }, [id]);
 
   const filteredPlayers = useMemo(() => {
@@ -64,7 +67,7 @@ export default function EventDetailPage() {
 
   const formatDate = (d: string) => {
     const date = new Date(d + "T00:00:00");
-    return date.toLocaleDateString("es-CO", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+    return date.toLocaleDateString("es-CO", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "America/Bogota" });
   };
 
   const formatTime12 = (t: string) => {
@@ -84,7 +87,8 @@ export default function EventDetailPage() {
       return;
     }
     if (amount > (user?.balance || 0)) {
-      setBetError("Saldo insuficiente");
+      setBetError("Saldo insuficiente. Redirigiendo a recargar...");
+      setTimeout(() => navigate("/wallet"), 1500);
       return;
     }
     setBetError("");
@@ -99,6 +103,7 @@ export default function EventDetailPage() {
       setShowConfirmation(true);
       const me = await api.getMe();
       setUser(me);
+      setUserState(me);
     } catch (err) {
       setBetError(err instanceof Error ? err.message : "Error al apostar");
     } finally {
@@ -214,7 +219,6 @@ export default function EventDetailPage() {
         <div className="p-5 sm:p-6 space-y-3">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold px-2 py-0.5 rounded bg-[#b8860b]/20 text-[#ffd700]">{event.country === "venezuela" ? "VEN" : "COL"}</span>
               <h1 className="text-xl sm:text-2xl font-bold text-white">{event.name}</h1>
             </div>
             <span className={`shrink-0 text-xs font-bold px-3 py-1 rounded-full ${
@@ -308,9 +312,11 @@ export default function EventDetailPage() {
                   </div>
                   <div>
                     <p className="font-semibold text-white text-sm">{player.name}</p>
-                    <p className="text-xs text-gray-500">
-                      &quot;{player.nickname}&quot; - {player.team}
-                    </p>
+                    {(player.nickname && player.nickname !== "None") && (
+                      <p className="text-xs text-gray-500">
+                        &quot;{player.nickname}&quot;
+                      </p>
+                    )}
                   </div>
                 </div>
                 <div className="text-right">
@@ -356,18 +362,18 @@ export default function EventDetailPage() {
               <div className="bg-[#b8860b]/10 rounded-lg p-3">
                 <p className="text-xs text-gray-400">Jugador seleccionado</p>
                 <p className="font-bold text-[#ffd700]">{selectedPlayer.name}</p>
-                <p className="text-xs text-gray-500">&quot;{selectedPlayer.nickname}&quot; - Cuota: {selectedPlayer.odds.toFixed(2)}x</p>
+                <p className="text-xs text-gray-500">{selectedPlayer.nickname && selectedPlayer.nickname !== "None" ? `"${selectedPlayer.nickname}" - ` : ""}Cuota: {selectedPlayer.odds.toFixed(2)}x</p>
               </div>
 
               <div>
                 <label className="block text-xs text-gray-400 mb-1">Monto de apuesta (COP)</label>
                 <input
-                  type="number"
-                  value={betAmount}
-                  onChange={(e) => setBetAmount(e.target.value)}
+                  type="text"
+                  inputMode="numeric"
+                  value={formatMoneyInput(betAmount)}
+                  onChange={(e) => setBetAmount(parseMoneyInput(e.target.value))}
                   className="w-full bg-[#0a0a0a] border border-gray-700 rounded-lg px-4 py-3 text-white focus:border-[#b8860b] focus:outline-none text-lg font-bold"
                   placeholder="10.000"
-                  min="1000" step="1000"
                 />
                 <div className="flex gap-2 mt-2">
                   {[5000, 10000, 20000, 50000, 100000].map((amt) => (

@@ -1,14 +1,32 @@
-from fastapi import FastAPI, HTTPException, Depends, status
-from fastapi.middleware.cors import CORSMiddleware
-from typing import List
-import uuid
-from datetime import datetime, timezone, timedelta
+from dotenv import load_dotenv
+load_dotenv()
 
-from app.database import get_db, init_db
+from fastapi import FastAPI, HTTPException, Depends, status, UploadFile, File, Form, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+from typing import List, Optional
+import uuid
+import os
+import asyncio
+import json
+from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
+
+# Colombia timezone (UTC-5, no DST)
+COLOMBIA_TZ = ZoneInfo("America/Bogota")
+
+def now_colombia() -> datetime:
+    """Get current datetime in Colombia timezone."""
+    return datetime.now(COLOMBIA_TZ)
+
+from app.database import get_db, init_db, create_backup, list_backups, restore_backup, auto_restore_if_empty
 from app.auth import (
     hash_password, verify_password, create_token,
-    get_current_user, get_admin_user
+    get_current_user, get_admin_user, get_user_from_token_str
 )
+from app import telegram_bot
 from app.models import (
     RegisterRequest, LoginRequest, TokenResponse,
     EventCreate, EventUpdate,
@@ -22,6 +40,29 @@ from app.models import (
 
 app = FastAPI(title="Club del Coleo API", version="1.0.0")
 
+# ==================== SSE NOTIFICATION SYSTEM ====================
+# In-memory store of connected SSE clients: { user_id: [asyncio.Queue, ...] }
+_sse_clients: dict[int, list[asyncio.Queue]] = {}
+
+
+async def broadcast_to_user(user_id: int, event_type: str, data: dict):
+    """Send a real-time event to all connected clients of a specific user."""
+    payload = json.dumps({"type": event_type, **data}, ensure_ascii=False)
+    queues = _sse_clients.get(user_id, [])
+    for q in queues:
+        try:
+            q.put_nowait(payload)
+        except asyncio.QueueFull:
+            pass  # drop if client is too slow
+
+
+async def broadcast_to_admins(event_type: str, data: dict):
+    """Send a real-time event to all connected admin clients."""
+    with get_db() as conn:
+        admins = conn.execute("SELECT id FROM users WHERE is_admin = 1").fetchall()
+    for admin in admins:
+        await broadcast_to_user(admin["id"], event_type, data)
+
 # Disable CORS. Do not remove this for full-stack development.
 app.add_middleware(
     CORSMiddleware,
@@ -33,8 +74,20 @@ app.add_middleware(
 
 
 @app.on_event("startup")
-def startup():
+async def startup():
     init_db()
+    # Auto-restore from backup if DB is empty
+    auto_restore_if_empty()
+    # Re-run init_db after restore to ensure schema is up to date
+    init_db()
+    # Create a startup backup
+    create_backup("startup")
+    # Set up Telegram bot webhook if configured
+    if telegram_bot.is_configured():
+        backend_url = os.environ.get("BACKEND_PUBLIC_URL", "")
+        if backend_url:
+            webhook_url = f"{backend_url.rstrip('/')}/api/telegram/webhook"
+            await telegram_bot.setup_webhook(webhook_url)
 
 
 @app.get("/healthz")
@@ -84,7 +137,7 @@ async def register(req: RegisterRequest):
 
         conn.execute(
             "UPDATE invite_codes SET is_used = 1, used_by = ?, used_at = ? WHERE id = ?",
-            (user_id, datetime.now(timezone.utc).isoformat(), invite["id"])
+            (user_id, now_colombia().isoformat(), invite["id"])
         )
 
         token = create_token(user_id, False)
@@ -285,6 +338,23 @@ async def add_player_to_event(event_id: int, data: EventPlayerAdd, user=Depends(
         return {"message": "Jugador agregado al evento exitosamente"}
 
 
+@app.put("/api/events/{event_id}/players/{player_id}")
+async def update_player_in_event(event_id: int, player_id: int, data: dict, user=Depends(get_admin_user)):
+    with get_db() as conn:
+        existing = conn.execute(
+            "SELECT 1 FROM event_players WHERE event_id = ? AND player_id = ?",
+            (event_id, player_id)
+        ).fetchone()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Jugador no encontrado en este evento")
+        if "odds" in data:
+            conn.execute(
+                "UPDATE event_players SET odds = ? WHERE event_id = ? AND player_id = ?",
+                (data["odds"], event_id, player_id)
+            )
+        return {"message": "Cuota actualizada exitosamente"}
+
+
 @app.delete("/api/events/{event_id}/players/{player_id}")
 async def remove_player_from_event(event_id: int, player_id: int, user=Depends(get_admin_user)):
     with get_db() as conn:
@@ -308,7 +378,7 @@ async def place_bet(bet: BetCreate, user=Depends(get_current_user)):
     if user.get("self_excluded_until"):
         try:
             excluded = datetime.fromisoformat(user["self_excluded_until"])
-            if datetime.now(timezone.utc) < excluded:
+            if now_colombia() < excluded:
                 raise HTTPException(status_code=403, detail="Tu cuenta esta en periodo de auto-exclusion. No puedes apostar en este momento.")
         except (ValueError, TypeError):
             pass
@@ -364,21 +434,29 @@ async def place_bet(bet: BetCreate, user=Depends(get_current_user)):
         player = conn.execute("SELECT name FROM players WHERE id = ?", (bet.player_id,)).fetchone()
         new_balance = conn.execute("SELECT balance FROM users WHERE id = ?", (user["id"],)).fetchone()
 
-        return {
-            "bet_id": bet_id,
-            "ticket_code": ticket_code,
-            "event_name": event["name"],
-            "event_date": event["date"],
-            "event_time": event["time"],
-            "event_location": event["location"],
-            "player_name": player["name"],
-            "amount": bet.amount,
-            "odds": odds,
-            "potential_win": potential_win,
-            "status": "pending",
-            "new_balance": new_balance["balance"],
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        }
+    # SSE: notify admins about new bet
+    await broadcast_to_admins("new_bet", {
+        "title": "Nueva apuesta",
+        "message": f"{user['username']} aposto ${int(bet.amount):,} COP en {event['name']} por {player['name']}",
+        "amount": bet.amount,
+        "username": user["username"],
+    })
+
+    return {
+        "bet_id": bet_id,
+        "ticket_code": ticket_code,
+        "event_name": event["name"],
+        "event_date": event["date"],
+        "event_time": event["time"],
+        "event_location": event["location"],
+        "player_name": player["name"],
+        "amount": bet.amount,
+        "odds": odds,
+        "potential_win": potential_win,
+        "status": "pending",
+        "new_balance": new_balance["balance"],
+        "created_at": now_colombia().isoformat(),
+    }
 
 
 @app.get("/api/bets")
@@ -433,14 +511,40 @@ async def get_wallet(user=Depends(get_current_user)):
         }
 
 
+# Ensure comprobantes directory exists
+COMPROBANTES_DIR = "/data/comprobantes"
+os.makedirs(COMPROBANTES_DIR, exist_ok=True)
+app.mount("/comprobantes", StaticFiles(directory=COMPROBANTES_DIR), name="comprobantes")
+
+
 @app.post("/api/wallet/deposit")
-async def deposit(req: DepositRequest, user=Depends(get_current_user)):
-    if req.amount <= 0:
+async def deposit(
+    amount: float = Form(...),
+    method: str = Form(...),
+    comprobante: UploadFile = File(...),
+    user=Depends(get_current_user),
+):
+    if amount <= 0:
         raise HTTPException(status_code=400, detail="Monto debe ser mayor a 0")
-    if req.amount < 5000:
+    if amount < 5000:
         raise HTTPException(status_code=400, detail="Deposito minimo: $5,000 COP")
-    if req.method not in ["nequi", "daviplata", "bancolombia"]:
+    if method not in ["nequi", "breb", "daviplata", "bancolombia"]:
         raise HTTPException(status_code=400, detail="Metodo de pago no valido")
+
+    # Validate file type
+    allowed_types = ["image/jpeg", "image/png", "image/webp", "image/gif", "application/pdf"]
+    if comprobante.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="Tipo de archivo no permitido. Usa JPG, PNG, WebP, GIF o PDF.")
+
+    # Save the comprobante file
+    ext = comprobante.filename.rsplit(".", 1)[-1] if "." in (comprobante.filename or "") else "jpg"
+    filename = f"{uuid.uuid4().hex}.{ext}"
+    filepath = os.path.join(COMPROBANTES_DIR, filename)
+    content = await comprobante.read()
+    with open(filepath, "wb") as f:
+        f.write(content)
+
+    reference = f"/comprobantes/{filename}"
 
     with get_db() as conn:
         # Check daily deposit limit
@@ -448,10 +552,10 @@ async def deposit(req: DepositRequest, user=Depends(get_current_user)):
         today_deposits = conn.execute(
             """SELECT COALESCE(SUM(amount), 0) as total FROM deposit_requests
                WHERE user_id = ? AND status = 'approved'
-               AND date(created_at) = date('now')""",
-            (user["id"],)
+               AND date(created_at) = date(?)""",
+            (user["id"], now_colombia().strftime("%Y-%m-%d"))
         ).fetchone()["total"]
-        if today_deposits + req.amount > daily_limit:
+        if today_deposits + amount > daily_limit:
             raise HTTPException(
                 status_code=400,
                 detail=f"Limite diario de deposito excedido. Limite: ${int(daily_limit):,} COP. Ya depositado hoy: ${int(today_deposits):,} COP"
@@ -461,7 +565,7 @@ async def deposit(req: DepositRequest, user=Depends(get_current_user)):
         cursor = conn.execute(
             """INSERT INTO deposit_requests (user_id, amount, method, reference)
                VALUES (?, ?, ?, ?)""",
-            (user["id"], req.amount, req.method, req.reference)
+            (user["id"], amount, method, reference)
         )
 
         # Create notification for admin
@@ -470,16 +574,36 @@ async def deposit(req: DepositRequest, user=Depends(get_current_user)):
                SELECT id, 'Nueva solicitud de deposito',
                ?, 'deposit'
                FROM users WHERE is_admin = 1""",
-            (f"Solicitud de ${int(req.amount):,} COP via {req.method} de {user['username']}",)
+            (f"Solicitud de ${int(amount):,} COP via {method} de {user['username']}",)
         )
 
-        return {
-            "message": "Solicitud de recarga enviada. Pendiente de aprobacion por el administrador.",
-            "request_id": cursor.lastrowid,
-            "amount": req.amount,
-            "method": req.method,
-            "status": "pending",
-        }
+        req_id = cursor.lastrowid
+
+    # SSE: notify admins about new deposit request
+    await broadcast_to_admins("new_deposit", {
+        "title": "Nueva solicitud de deposito",
+        "message": f"Solicitud de ${int(amount):,} COP via {method} de {user['username']}",
+        "amount": amount,
+        "method": method,
+        "username": user["username"],
+    })
+
+    # Telegram: send comprobante to admin chat with approve/reject buttons
+    await telegram_bot.notify_new_deposit(
+        deposit_id=req_id,
+        username=user["username"],
+        amount=amount,
+        method=method,
+        comprobante_path=filepath,
+    )
+
+    return {
+        "message": "Solicitud de recarga enviada. Pendiente de aprobacion por el administrador.",
+        "request_id": req_id,
+        "amount": amount,
+        "method": method,
+        "status": "pending",
+    }
 
 
 @app.get("/api/wallet/deposits")
@@ -501,7 +625,7 @@ async def request_withdrawal(req: WithdrawalRequest, user=Depends(get_current_us
         raise HTTPException(status_code=400, detail="Monto debe ser mayor a 0")
     if req.amount < 10000:
         raise HTTPException(status_code=400, detail="Retiro minimo: $10,000 COP")
-    if req.method not in ["nequi", "daviplata", "bancolombia"]:
+    if req.method not in ["nequi", "breb", "daviplata", "bancolombia"]:
         raise HTTPException(status_code=400, detail="Metodo de pago no valido")
     if not req.account_number.strip():
         raise HTTPException(status_code=400, detail="Numero de cuenta requerido")
@@ -626,6 +750,41 @@ async def list_all_bets(user=Depends(get_admin_user)):
         return [dict(b) for b in bets]
 
 
+@app.get("/api/admin/users/{user_id}/bets")
+async def get_user_bets(user_id: int, user=Depends(get_admin_user)):
+    with get_db() as conn:
+        bets = conn.execute(
+            """SELECT b.*, e.name as event_name, p.name as player_name
+               FROM bets b
+               JOIN events e ON b.event_id = e.id
+               JOIN players p ON b.player_id = p.id
+               WHERE b.user_id = ?
+               ORDER BY b.created_at DESC""",
+            (user_id,)
+        ).fetchall()
+        return [dict(b) for b in bets]
+
+
+@app.get("/api/admin/users/{user_id}/deposits")
+async def get_user_deposits(user_id: int, user=Depends(get_admin_user)):
+    with get_db() as conn:
+        deposits = conn.execute(
+            "SELECT * FROM deposits WHERE user_id = ? ORDER BY created_at DESC",
+            (user_id,)
+        ).fetchall()
+        return [dict(d) for d in deposits]
+
+
+@app.get("/api/admin/users/{user_id}/withdrawals")
+async def get_user_withdrawals(user_id: int, user=Depends(get_admin_user)):
+    with get_db() as conn:
+        withdrawals = conn.execute(
+            "SELECT * FROM withdrawals WHERE user_id = ? ORDER BY created_at DESC",
+            (user_id,)
+        ).fetchall()
+        return [dict(w) for w in withdrawals]
+
+
 @app.get("/api/admin/stats")
 async def admin_stats(user=Depends(get_admin_user)):
     with get_db() as conn:
@@ -709,7 +868,7 @@ async def self_exclude(data: SelfExclusion, user=Depends(get_current_user)):
     if data.days < 1 or data.days > 365:
         raise HTTPException(status_code=400, detail="Periodo de exclusion: 1-365 dias")
     with get_db() as conn:
-        exclude_until = (datetime.now(timezone.utc) + timedelta(days=data.days)).isoformat()
+        exclude_until = (now_colombia() + timedelta(days=data.days)).isoformat()
         conn.execute("UPDATE users SET self_excluded_until = ? WHERE id = ?", (exclude_until, user["id"]))
         return {"message": f"Te has auto-excluido por {data.days} dias", "excluded_until": exclude_until}
 
@@ -749,6 +908,58 @@ async def mark_one_read(notif_id: int, user=Depends(get_current_user)):
             (notif_id, user["id"])
         )
         return {"message": "ok"}
+
+
+# ==================== SSE STREAM ====================
+
+@app.get("/api/notifications/stream")
+async def notifications_stream(request: Request, token: str = ""):
+    """Server-Sent Events stream for real-time notifications."""
+    if not token:
+        raise HTTPException(status_code=401, detail="Token requerido")
+    user = get_user_from_token_str(token)
+    user_id = user["id"]
+    queue: asyncio.Queue = asyncio.Queue(maxsize=50)
+
+    # Register this client
+    if user_id not in _sse_clients:
+        _sse_clients[user_id] = []
+    _sse_clients[user_id].append(queue)
+
+    async def event_generator():
+        try:
+            # Send initial connection event
+            yield f"data: {json.dumps({'type': 'connected', 'message': 'Conectado'})}\n\n"
+            while True:
+                # Check if client disconnected
+                if await request.is_disconnected():
+                    break
+                try:
+                    # Wait for a message with timeout (for keep-alive)
+                    payload = await asyncio.wait_for(queue.get(), timeout=25.0)
+                    yield f"data: {payload}\n\n"
+                except asyncio.TimeoutError:
+                    # Send keep-alive ping
+                    yield f": ping\n\n"
+        finally:
+            # Cleanup on disconnect
+            if user_id in _sse_clients:
+                try:
+                    _sse_clients[user_id].remove(queue)
+                except ValueError:
+                    pass
+                if not _sse_clients[user_id]:
+                    del _sse_clients[user_id]
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 # ==================== DECLARE WINNER ====================
@@ -791,7 +1002,7 @@ async def declare_winner(event_id: int, data: DeclareWinner, user=Depends(get_ad
         ).fetchall()
         for bet in winning_bets:
             conn.execute("UPDATE bets SET status = 'won', resolved_at = ? WHERE id = ?",
-                         (datetime.now(timezone.utc).isoformat(), bet["id"]))
+                         (now_colombia().isoformat(), bet["id"]))
             conn.execute("UPDATE users SET balance = balance + ? WHERE id = ?",
                          (bet["potential_win"], bet["user_id"]))
             conn.execute(
@@ -814,7 +1025,7 @@ async def declare_winner(event_id: int, data: DeclareWinner, user=Depends(get_ad
         ).fetchall()
         for bet in losing_bets:
             conn.execute("UPDATE bets SET status = 'lost', resolved_at = ? WHERE id = ?",
-                         (datetime.now(timezone.utc).isoformat(), bet["id"]))
+                         (now_colombia().isoformat(), bet["id"]))
             conn.execute(
                 """INSERT INTO notifications (user_id, title, message, type)
                    VALUES (?, ?, ?, 'loss')""",
@@ -822,11 +1033,35 @@ async def declare_winner(event_id: int, data: DeclareWinner, user=Depends(get_ad
                  f"Tu apuesta en {event['name']} no gano. El ganador fue {player['name']}.")
             )
 
-        return {
-            "message": f"Ganador declarado: {player['name']}",
-            "winning_bets": len(winning_bets),
-            "losing_bets": len(losing_bets),
-        }
+        # Collect user ids for SSE broadcast
+        winner_user_ids = [(b["user_id"], b["potential_win"]) for b in winning_bets]
+        loser_user_ids = [b["user_id"] for b in losing_bets]
+        event_name = event["name"]
+        player_name = player["name"]
+
+    # SSE: notify winners
+    for uid, pwin in winner_user_ids:
+        await broadcast_to_user(uid, "bet_won", {
+            "title": "Apuesta ganada!",
+            "message": f"Tu apuesta en {event_name} gano! Ganaste ${int(pwin):,} COP",
+            "amount": pwin,
+            "event_name": event_name,
+            "player_name": player_name,
+        })
+    # SSE: notify losers
+    for uid in loser_user_ids:
+        await broadcast_to_user(uid, "bet_lost", {
+            "title": "Apuesta perdida",
+            "message": f"Tu apuesta en {event_name} no gano. El ganador fue {player_name}.",
+            "event_name": event_name,
+            "player_name": player_name,
+        })
+
+    return {
+        "message": f"Ganador declarado: {player_name}",
+        "winning_bets": len(winner_user_ids),
+        "losing_bets": len(loser_user_ids),
+    }
 
 
 # ==================== ADMIN DEPOSITS & WITHDRAWALS ====================
@@ -856,36 +1091,56 @@ async def review_deposit(dep_id: int, data: DepositReview, user=Depends(get_admi
 
         conn.execute(
             "UPDATE deposit_requests SET status = ?, reviewed_by = ?, reviewed_at = ? WHERE id = ?",
-            (data.status, user["id"], datetime.now(timezone.utc).isoformat(), dep_id)
+            (data.status, user["id"], now_colombia().isoformat(), dep_id)
         )
 
-        method_names = {"nequi": "Nequi", "daviplata": "Daviplata", "bancolombia": "Bancolombia"}
+        method_names = {"nequi": "Nequi", "breb": "Bre-B", "daviplata": "Daviplata", "bancolombia": "Bancolombia"}
+        dep_user_id = dep["user_id"]
+        dep_amount = dep["amount"]
+        dep_method = dep["method"]
         if data.status == "approved":
             conn.execute(
                 "UPDATE users SET balance = balance + ? WHERE id = ?",
-                (dep["amount"], dep["user_id"])
+                (dep_amount, dep_user_id)
             )
+            new_bal = conn.execute("SELECT balance FROM users WHERE id = ?", (dep_user_id,)).fetchone()["balance"]
             conn.execute(
                 """INSERT INTO transactions (user_id, type, amount, method, reference, description)
                    VALUES (?, 'deposit', ?, ?, ?, ?)""",
-                (dep["user_id"], dep["amount"], dep["method"], dep["reference"],
-                 f"Recarga via {method_names.get(dep['method'], dep['method'])}")
+                (dep_user_id, dep_amount, dep_method, dep["reference"],
+                 f"Recarga via {method_names.get(dep_method, dep_method)}")
             )
             conn.execute(
                 """INSERT INTO notifications (user_id, title, message, type)
                    VALUES (?, ?, ?, 'deposit')""",
-                (dep["user_id"], "Deposito aprobado",
-                 f"Tu deposito de ${int(dep['amount']):,} COP via {method_names.get(dep['method'], dep['method'])} ha sido aprobado.")
+                (dep_user_id, "Deposito aprobado",
+                 f"Tu deposito de ${int(dep_amount):,} COP via {method_names.get(dep_method, dep_method)} ha sido aprobado.")
             )
         else:
+            new_bal = None
             conn.execute(
                 """INSERT INTO notifications (user_id, title, message, type)
                    VALUES (?, ?, ?, 'deposit')""",
-                (dep["user_id"], "Deposito rechazado",
-                 f"Tu solicitud de deposito de ${int(dep['amount']):,} COP fue rechazada. Contacta soporte para mas informacion.")
+                (dep_user_id, "Deposito rechazado",
+                 f"Tu solicitud de deposito de ${int(dep_amount):,} COP fue rechazada. Contacta soporte para mas informacion.")
             )
 
-        return {"message": f"Deposito {data.status}"}
+    # SSE: notify user about deposit review
+    if data.status == "approved":
+        await broadcast_to_user(dep_user_id, "deposit_approved", {
+            "title": "Deposito aprobado",
+            "message": f"Tu deposito de ${int(dep_amount):,} COP ha sido aprobado.",
+            "amount": dep_amount,
+            "new_balance": new_bal,
+        })
+    else:
+        await broadcast_to_user(dep_user_id, "deposit_rejected", {
+            "title": "Deposito rechazado",
+            "message": f"Tu solicitud de deposito de ${int(dep_amount):,} COP fue rechazada.",
+            "amount": dep_amount,
+        })
+
+    return {"message": f"Deposito {data.status}"}
 
 
 @app.get("/api/admin/withdrawals")
@@ -913,36 +1168,223 @@ async def review_withdrawal(wd_id: int, data: WithdrawalReview, user=Depends(get
 
         conn.execute(
             "UPDATE withdrawal_requests SET status = ?, reviewed_by = ?, reviewed_at = ? WHERE id = ?",
-            (data.status, user["id"], datetime.now(timezone.utc).isoformat(), wd_id)
+            (data.status, user["id"], now_colombia().isoformat(), wd_id)
         )
 
-        method_names = {"nequi": "Nequi", "daviplata": "Daviplata", "bancolombia": "Bancolombia"}
+        method_names = {"nequi": "Nequi", "breb": "Bre-B", "daviplata": "Daviplata", "bancolombia": "Bancolombia"}
+        wd_user_id = wd["user_id"]
+        wd_amount = wd["amount"]
         if data.status == "approved":
             conn.execute(
                 "UPDATE users SET balance = balance - ? WHERE id = ?",
-                (wd["amount"], wd["user_id"])
+                (wd_amount, wd_user_id)
             )
             conn.execute(
                 """INSERT INTO transactions (user_id, type, amount, method, description)
                    VALUES (?, 'withdrawal', ?, ?, ?)""",
-                (wd["user_id"], -wd["amount"], wd["method"],
+                (wd_user_id, -wd_amount, wd["method"],
                  f"Retiro via {method_names.get(wd['method'], wd['method'])} a {wd['account_number']}")
             )
             conn.execute(
                 """INSERT INTO notifications (user_id, title, message, type)
                    VALUES (?, ?, ?, 'withdrawal')""",
-                (wd["user_id"], "Retiro aprobado",
-                 f"Tu retiro de ${int(wd['amount']):,} COP a {wd['account_number']} ha sido aprobado.")
+                (wd_user_id, "Retiro aprobado",
+                 f"Tu retiro de ${int(wd_amount):,} COP a {wd['account_number']} ha sido aprobado.")
             )
         else:
             conn.execute(
                 """INSERT INTO notifications (user_id, title, message, type)
                    VALUES (?, ?, ?, 'withdrawal')""",
-                (wd["user_id"], "Retiro rechazado",
-                 f"Tu solicitud de retiro de ${int(wd['amount']):,} COP fue rechazada.")
+                (wd_user_id, "Retiro rechazado",
+                 f"Tu solicitud de retiro de ${int(wd_amount):,} COP fue rechazada.")
             )
 
-        return {"message": f"Retiro {data.status}"}
+    # SSE: notify user about withdrawal review
+    if data.status == "approved":
+        await broadcast_to_user(wd_user_id, "withdrawal_approved", {
+            "title": "Retiro aprobado",
+            "message": f"Tu retiro de ${int(wd_amount):,} COP ha sido aprobado.",
+            "amount": wd_amount,
+        })
+    else:
+        await broadcast_to_user(wd_user_id, "withdrawal_rejected", {
+            "title": "Retiro rechazado",
+            "message": f"Tu solicitud de retiro de ${int(wd_amount):,} COP fue rechazada.",
+            "amount": wd_amount,
+        })
+
+    return {"message": f"Retiro {data.status}"}
+
+
+# ==================== PROMOTIONS ====================
+
+class PromotionData(BaseModel):
+    title: str
+    message: str
+
+@app.post("/api/admin/promotions")
+async def send_promotion(data: PromotionData, user=Depends(get_admin_user)):
+    """Send a promotional notification to ALL active users via SSE."""
+    with get_db() as conn:
+        active_users = conn.execute("SELECT id FROM users WHERE is_active = 1").fetchall()
+        for u in active_users:
+            conn.execute(
+                "INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, 'promotion')",
+                (u["id"], data.title, data.message),
+            )
+        # Broadcast via SSE to all connected clients
+        for u in active_users:
+            await broadcast_to_user(u["id"], "promotion", {
+                "title": data.title,
+                "message": data.message,
+            })
+    return {"message": f"Promocion enviada a {len(active_users)} usuarios"}
+
+
+# ==================== TELEGRAM BOT WEBHOOK ====================
+
+@app.post("/api/telegram/webhook")
+async def telegram_webhook(request: Request):
+    """Handle Telegram webhook updates (callback queries from inline buttons)."""
+    try:
+        update = await request.json()
+    except Exception:
+        return {"ok": True}
+
+    # Handle callback queries (inline button presses)
+    callback_query = update.get("callback_query")
+    if callback_query:
+        callback_id = callback_query["id"]
+        data = callback_query.get("data", "")
+        message = callback_query.get("message", {})
+        chat_id = str(message.get("chat", {}).get("id", ""))
+        message_id = message.get("message_id")
+
+        if data.startswith("approve_deposit:") or data.startswith("reject_deposit:"):
+            action, dep_id_str = data.split(":", 1)
+            try:
+                dep_id = int(dep_id_str)
+            except ValueError:
+                await telegram_bot.answer_callback_query(callback_id, "ID de deposito invalido")
+                return {"ok": True}
+
+            new_status = "approved" if action == "approve_deposit" else "rejected"
+
+            with get_db() as conn:
+                dep = conn.execute("SELECT * FROM deposit_requests WHERE id = ?", (dep_id,)).fetchone()
+                if not dep:
+                    await telegram_bot.answer_callback_query(callback_id, "Deposito no encontrado")
+                    return {"ok": True}
+                if dep["status"] != "pending":
+                    await telegram_bot.answer_callback_query(callback_id, f"Deposito ya fue {dep['status']}")
+                    # Update the message to reflect current status
+                    dep_user = conn.execute("SELECT username FROM users WHERE id = ?", (dep["user_id"],)).fetchone()
+                    await telegram_bot.edit_message_caption(
+                        chat_id, message_id,
+                        f"<b>Deposito #{dep_id} - {'APROBADO' if dep['status'] == 'approved' else 'RECHAZADO'}</b>\n\n"
+                        f"<b>Usuario:</b> {dep_user['username'] if dep_user else 'N/A'}\n"
+                        f"<b>Monto:</b> ${int(dep['amount']):,} COP\n"
+                        f"<b>Estado:</b> Ya procesado"
+                    )
+                    return {"ok": True}
+
+                # Get first admin user for reviewed_by
+                admin = conn.execute("SELECT id FROM users WHERE is_admin = 1 LIMIT 1").fetchone()
+                admin_id = admin["id"] if admin else 1
+
+                conn.execute(
+                    "UPDATE deposit_requests SET status = ?, reviewed_by = ?, reviewed_at = ? WHERE id = ?",
+                    (new_status, admin_id, now_colombia().isoformat(), dep_id)
+                )
+
+                dep_user_id = dep["user_id"]
+                dep_amount = dep["amount"]
+                dep_method = dep["method"]
+                method_names = {"nequi": "Nequi", "daviplata": "Daviplata", "bancolombia": "Bancolombia"}
+
+                if new_status == "approved":
+                    conn.execute(
+                        "UPDATE users SET balance = balance + ? WHERE id = ?",
+                        (dep_amount, dep_user_id)
+                    )
+                    new_bal = conn.execute("SELECT balance FROM users WHERE id = ?", (dep_user_id,)).fetchone()["balance"]
+                    conn.execute(
+                        """INSERT INTO transactions (user_id, type, amount, method, reference, description)
+                           VALUES (?, 'deposit', ?, ?, ?, ?)""",
+                        (dep_user_id, dep_amount, dep_method, dep["reference"],
+                         f"Recarga via {method_names.get(dep_method, dep_method)}")
+                    )
+                    conn.execute(
+                        """INSERT INTO notifications (user_id, title, message, type)
+                           VALUES (?, ?, ?, 'deposit')""",
+                        (dep_user_id, "Deposito aprobado",
+                         f"Tu deposito de ${int(dep_amount):,} COP via {method_names.get(dep_method, dep_method)} ha sido aprobado.")
+                    )
+                else:
+                    new_bal = None
+                    conn.execute(
+                        """INSERT INTO notifications (user_id, title, message, type)
+                           VALUES (?, ?, ?, 'deposit')""",
+                        (dep_user_id, "Deposito rechazado",
+                         f"Tu solicitud de deposito de ${int(dep_amount):,} COP fue rechazada. Contacta soporte para mas informacion.")
+                    )
+
+                dep_user = conn.execute("SELECT username FROM users WHERE id = ?", (dep_user_id,)).fetchone()
+
+            # SSE: notify user about deposit review
+            if new_status == "approved":
+                await broadcast_to_user(dep_user_id, "deposit_approved", {
+                    "title": "Deposito aprobado",
+                    "message": f"Tu deposito de ${int(dep_amount):,} COP ha sido aprobado.",
+                    "amount": dep_amount,
+                    "new_balance": new_bal,
+                })
+            else:
+                await broadcast_to_user(dep_user_id, "deposit_rejected", {
+                    "title": "Deposito rechazado",
+                    "message": f"Tu solicitud de deposito de ${int(dep_amount):,} COP fue rechazada.",
+                    "amount": dep_amount,
+                })
+
+            # Update Telegram message
+            status_label = "APROBADO" if new_status == "approved" else "RECHAZADO"
+            username = dep_user["username"] if dep_user else "N/A"
+            updated_caption = (
+                f"<b>Deposito #{dep_id} - {status_label}</b>\n\n"
+                f"<b>Usuario:</b> {username}\n"
+                f"<b>Monto:</b> ${int(dep_amount):,} COP\n"
+                f"<b>Metodo:</b> {method_names.get(dep_method, dep_method)}\n"
+                f"<b>Estado:</b> {status_label}"
+            )
+            await telegram_bot.edit_message_caption(chat_id, message_id, updated_caption)
+            await telegram_bot.answer_callback_query(
+                callback_id,
+                f"Deposito #{dep_id} {status_label}"
+            )
+
+    # Handle /start command - respond with chat ID info
+    msg = update.get("message", {})
+    if msg.get("text", "").startswith("/start"):
+        chat_id = str(msg.get("chat", {}).get("id", ""))
+        await telegram_bot.send_message(
+            chat_id,
+            "<b>Club del Coleo - Bot Admin</b>\n\n"
+            f"Chat ID: <code>{chat_id}</code>\n\n"
+            "Este bot te notificara cuando un usuario solicite un deposito. "
+            "Podras aprobar o rechazar directamente desde aqui."
+        )
+
+    return {"ok": True}
+
+
+@app.get("/api/admin/telegram/status")
+async def telegram_status(user=Depends(get_admin_user)):
+    """Check Telegram bot configuration status."""
+    return {
+        "configured": telegram_bot.is_configured(),
+        "bot_token_set": bool(telegram_bot.TELEGRAM_BOT_TOKEN),
+        "chat_id_set": bool(telegram_bot.TELEGRAM_ADMIN_CHAT_ID),
+    }
 
 
 # ==================== SEED DATA ====================
@@ -977,8 +1419,6 @@ async def seed_data(user=Depends(get_admin_user)):
             ("Copa Llanera 2026", "Competencia regional con los mejores jinetes del llano.", "Manga de Coleo Yopal, Casanare", "colombia", "2026-05-22", "10:00", "upcoming"),
             ("Clasico de los Centauros", "Enfrentamiento entre los equipos mas fuertes de la temporada.", "Manga de Coleo Arauca", "colombia", "2026-06-01", "16:00", "upcoming"),
             ("Festival del Joropo y Coleo", "Evento cultural con competencias de coleo y musica llanera.", "Manga de Coleo San Martin, Meta", "colombia", "2026-04-10", "09:00", "finished"),
-            ("Campeonato Venezolano de Coleo", "Los mejores coleadores de Venezuela compiten por el titulo nacional.", "Manga de Coleo Barinas", "venezuela", "2026-05-20", "15:00", "upcoming"),
-            ("Copa Llanos de Venezuela", "Competencia entre los mejores equipos del llano venezolano.", "Manga de Coleo Calabozo, Guarico", "venezuela", "2026-06-05", "11:00", "upcoming"),
         ]
         for e in events_data:
             conn.execute(
@@ -1005,3 +1445,124 @@ async def seed_data(user=Depends(get_admin_user)):
             )
 
         return {"message": "Datos de ejemplo creados exitosamente"}
+
+
+# ==================== BACKUP SYSTEM ====================
+
+@app.get("/api/admin/backups")
+async def get_backups(user=Depends(get_admin_user)):
+    """List all available database backups."""
+    backups = list_backups()
+    return {"backups": backups}
+
+
+@app.post("/api/admin/backups")
+async def create_manual_backup(user=Depends(get_admin_user)):
+    """Create a manual database backup."""
+    path = create_backup("manual")
+    if not path:
+        raise HTTPException(status_code=500, detail="No se pudo crear el backup")
+    return {"message": "Backup creado exitosamente", "path": path}
+
+
+@app.post("/api/admin/backups/restore")
+async def restore_from_backup(data: dict, user=Depends(get_admin_user)):
+    """Restore database from a backup."""
+    backup_name = data.get("name", "")
+    if not backup_name:
+        raise HTTPException(status_code=400, detail="Nombre de backup requerido")
+    backups = list_backups()
+    backup = next((b for b in backups if b["name"] == backup_name), None)
+    if not backup:
+        raise HTTPException(status_code=404, detail="Backup no encontrado")
+    success = restore_backup(backup["path"])
+    if not success:
+        raise HTTPException(status_code=500, detail="Error al restaurar el backup")
+    return {"message": f"Base de datos restaurada desde {backup_name}"}
+
+
+# ==================== PASSWORD RECOVERY ====================
+
+class PasswordResetRequest(BaseModel):
+    username_or_email: str
+
+
+class AdminResetPassword(BaseModel):
+    new_password: str
+
+
+@app.post("/api/auth/password-reset-request")
+async def request_password_reset(data: PasswordResetRequest):
+    """User requests a password reset. Notifies admin via Telegram."""
+    with get_db() as conn:
+        user = conn.execute(
+            "SELECT id, username, email, full_name, phone FROM users WHERE username = ? OR email = ?",
+            (data.username_or_email, data.username_or_email)
+        ).fetchone()
+        if not user:
+            # Don't reveal if user exists or not
+            return {"message": "Si tu cuenta existe, el administrador recibira tu solicitud de recuperacion."}
+
+        user = dict(user)
+
+        # Store the reset request in notifications for admin
+        conn.execute(
+            """INSERT INTO notifications (user_id, title, message, type)
+               VALUES (?, ?, ?, ?)""",
+            (1,  # admin user id
+             "Solicitud de recuperacion de contrasena",
+             f"El usuario {user['username']} ({user['email']}) solicita restablecer su contrasena. Telefono: {user.get('phone', 'N/A')}",
+             "password_reset")
+        )
+
+    # Notify admin via Telegram
+    if telegram_bot.is_configured():
+        await telegram_bot.send_message(
+            telegram_bot.TELEGRAM_ADMIN_CHAT_ID,
+            f"<b>Solicitud de Recuperacion de Contrasena</b>\n\n"
+            f"<b>Usuario:</b> {user['username']}\n"
+            f"<b>Email:</b> {user['email']}\n"
+            f"<b>Nombre:</b> {user['full_name']}\n"
+            f"<b>Telefono:</b> {user.get('phone', 'N/A')}\n\n"
+            f"Para restablecer, ve al panel admin > Usuarios"
+        )
+
+    # SSE notify admins
+    await broadcast_to_admins("password_reset_request", {
+        "title": "Recuperacion de contrasena",
+        "message": f"{user['username']} solicita restablecer su contrasena",
+    })
+
+    return {"message": "Si tu cuenta existe, el administrador recibira tu solicitud de recuperacion."}
+
+
+@app.put("/api/admin/users/{user_id}/reset-password")
+async def admin_reset_password(user_id: int, data: AdminResetPassword, admin=Depends(get_admin_user)):
+    """Admin resets a user's password."""
+    if len(data.new_password) < 6:
+        raise HTTPException(status_code=400, detail="La contrasena debe tener al menos 6 caracteres")
+    with get_db() as conn:
+        user = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        if not user:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+        new_hash = hash_password(data.new_password)
+        conn.execute("UPDATE users SET password_hash = ? WHERE id = ?", (new_hash, user_id))
+
+        # Notify user that their password was reset
+        conn.execute(
+            """INSERT INTO notifications (user_id, title, message, type)
+               VALUES (?, ?, ?, ?)""",
+            (user_id,
+             "Contrasena restablecida",
+             "Tu contrasena ha sido restablecida por el administrador. Inicia sesion con tu nueva contrasena.",
+             "info")
+        )
+
+    # SSE notify the user
+    await broadcast_to_user(user_id, "password_reset", {
+        "title": "Contrasena restablecida",
+        "message": "Tu contrasena ha sido restablecida. Inicia sesion nuevamente.",
+    })
+
+    return {"message": f"Contrasena de {user['username']} restablecida exitosamente"}

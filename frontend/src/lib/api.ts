@@ -22,7 +22,8 @@ export function setUser(user: Record<string, unknown>) {
   localStorage.setItem("user", JSON.stringify(user));
 }
 
-async function request(path: string, options: RequestInit = {}) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function request(path: string, options: RequestInit = {}, retries = 2): Promise<any> {
   const token = getToken();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -31,12 +32,37 @@ async function request(path: string, options: RequestInit = {}) {
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;
   }
-  const res = await fetch(`${API_URL}${path}`, { ...options, headers });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.detail || `Error ${res.status}`);
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(`${API_URL}${path}`, { ...options, headers });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 401 && !path.includes("/auth/login")) {
+          clearToken();
+          window.location.href = "/login";
+          throw new Error("Sesion expirada. Inicia sesion de nuevo.");
+        }
+        throw new Error(data.detail || `Error ${res.status}`);
+      }
+      return res.json();
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      // Only retry on network errors (TypeError), not on HTTP/business errors
+      const isNetworkError = lastError.name === "TypeError" || lastError.message === "Load failed" || lastError.message === "Failed to fetch";
+      if (!isNetworkError || attempt >= retries) {
+        break;
+      }
+      // Wait before retrying (1s, then 2s)
+      await new Promise(r => setTimeout(r, (attempt + 1) * 1000));
+    }
   }
-  return res.json();
+  // Translate common network errors to Spanish
+  const msg = lastError?.message || "Error desconocido";
+  if (msg === "Load failed" || msg === "Failed to fetch") {
+    throw new Error("Error de conexion. Verifica tu internet e intenta de nuevo.");
+  }
+  throw lastError || new Error(msg);
 }
 
 export const api = {
@@ -95,6 +121,8 @@ export const api = {
   // Event Players
   addPlayerToEvent: (eventId: number, data: { player_id: number; position?: number; odds: number }) =>
     request(`/api/events/${eventId}/players`, { method: "POST", body: JSON.stringify(data) }),
+  updatePlayerOdds: (eventId: number, playerId: number, odds: number) =>
+    request(`/api/events/${eventId}/players/${playerId}`, { method: "PUT", body: JSON.stringify({ odds }) }),
   removePlayerFromEvent: (eventId: number, playerId: number) =>
     request(`/api/events/${eventId}/players/${playerId}`, { method: "DELETE" }),
 
@@ -106,8 +134,23 @@ export const api = {
 
   // Wallet
   getWallet: () => request("/api/wallet"),
-  deposit: (data: { amount: number; method: string; reference: string }) =>
-    request("/api/wallet/deposit", { method: "POST", body: JSON.stringify(data) }),
+  deposit: (data: { amount: number; method: string; comprobante: File }) => {
+    const formData = new FormData();
+    formData.append("amount", String(data.amount));
+    formData.append("method", data.method);
+    formData.append("comprobante", data.comprobante);
+    const token = localStorage.getItem("token");
+    const headers: Record<string, string> = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    return fetch(`${API_URL}/api/wallet/deposit`, { method: "POST", body: formData, headers }).then(async (res) => {
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        if (res.status === 401) { localStorage.removeItem("token"); localStorage.removeItem("user"); window.location.href = "/login"; }
+        throw new Error(d.detail || `Error ${res.status}`);
+      }
+      return res.json();
+    });
+  },
   getMyDeposits: () => request("/api/wallet/deposits"),
   withdraw: (data: { amount: number; method: string; account_number: string }) =>
     request("/api/wallet/withdraw", { method: "POST", body: JSON.stringify(data) }),
@@ -117,6 +160,10 @@ export const api = {
   getNotifications: () => request("/api/notifications"),
   markNotificationsRead: () => request("/api/notifications/read", { method: "PUT" }),
   markOneRead: (id: number) => request(`/api/notifications/${id}/read`, { method: "PUT" }),
+  getSSEUrl: () => {
+    const token = getToken();
+    return `${API_URL}/api/notifications/stream?token=${encodeURIComponent(token || "")}`;
+  },
 
   // Admin
   getStats: () => request("/api/admin/stats"),
@@ -124,10 +171,13 @@ export const api = {
   updateUser: (id: number, data: Record<string, unknown>) =>
     request(`/api/admin/users/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   getAllBets: () => request("/api/admin/bets"),
+  getUserBets: (userId: number) => request(`/api/admin/users/${userId}/bets`),
   generateInviteCodes: (count: number) =>
     request("/api/admin/invite-codes", { method: "POST", body: JSON.stringify({ count }) }),
   getInviteCodes: () => request("/api/admin/invite-codes"),
   seedData: () => request("/api/admin/seed", { method: "POST" }),
+  sendPromotion: (data: { title: string; message: string }) =>
+    request("/api/admin/promotions", { method: "POST", body: JSON.stringify(data) }),
 
   // Admin - Deposits & Withdrawals
   getAdminDeposits: () => request("/api/admin/deposits"),
@@ -136,4 +186,20 @@ export const api = {
   getAdminWithdrawals: () => request("/api/admin/withdrawals"),
   reviewWithdrawal: (id: number, status: string) =>
     request(`/api/admin/withdrawals/${id}`, { method: "PUT", body: JSON.stringify({ status }) }),
+
+  // Admin - User History
+  getUserDeposits: (userId: number) => request(`/api/admin/users/${userId}/deposits`),
+  getUserWithdrawals: (userId: number) => request(`/api/admin/users/${userId}/withdrawals`),
+
+  // Password Recovery
+  requestPasswordReset: (username_or_email: string) =>
+    request("/api/auth/password-reset-request", { method: "POST", body: JSON.stringify({ username_or_email }) }),
+  adminResetPassword: (userId: number, new_password: string) =>
+    request(`/api/admin/users/${userId}/reset-password`, { method: "PUT", body: JSON.stringify({ new_password }) }),
+
+  // Admin - Backups
+  getBackups: () => request("/api/admin/backups"),
+  createBackup: () => request("/api/admin/backups", { method: "POST" }),
+  restoreBackup: (name: string) =>
+    request("/api/admin/backups/restore", { method: "POST", body: JSON.stringify({ name }) }),
 };
