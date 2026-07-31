@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
+import { formatMoneyInput, parseMoneyInput } from "../lib/utils";
 import { Wallet, ArrowUpCircle, ArrowDownCircle, Clock, CreditCard, Smartphone, Building2, CheckCircle2, XCircle, AlertCircle, Upload, ImageIcon } from "lucide-react";
 
 interface Transaction {
@@ -173,9 +174,10 @@ export default function WalletPage() {
           </div>
           <div>
             <label className="block text-xs text-gray-400 mb-1">Monto (COP)</label>
-            <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)}
+            <input type="text" inputMode="numeric" value={formatMoneyInput(amount)}
+              onChange={(e) => setAmount(parseMoneyInput(e.target.value))}
               className="w-full bg-[#0a0a0a] border border-gray-700 rounded-lg px-4 py-3 text-white focus:border-[#b8860b] focus:outline-none text-lg font-bold"
-              placeholder="50,000" min="5000" step="5000" />
+              placeholder="50.000" />
             <div className="flex gap-2 mt-2">
               {[10000, 20000, 50000, 100000].map((amt) => (
                 <button key={amt} onClick={() => setAmount(String(amt))}
@@ -243,9 +245,10 @@ export default function WalletPage() {
           </div>
           <div>
             <label className="block text-xs text-gray-400 mb-1">Monto a Retirar (COP)</label>
-            <input type="number" value={wAmount} onChange={(e) => setWAmount(e.target.value)}
+            <input type="text" inputMode="numeric" value={formatMoneyInput(wAmount)}
+              onChange={(e) => setWAmount(parseMoneyInput(e.target.value))}
               className="w-full bg-[#0a0a0a] border border-gray-700 rounded-lg px-4 py-3 text-white focus:border-[#b8860b] focus:outline-none text-lg font-bold"
-              placeholder="50,000" min="10000" step="5000" />
+              placeholder="50.000" />
             <p className="text-xs text-gray-500 mt-1">
               Retiro minimo: $10,000 COP. Saldo: <span className="text-[#ffd700]">${balance.toLocaleString("es-CO")} COP</span>
             </p>

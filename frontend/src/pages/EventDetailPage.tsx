@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { api, getUser, setUser } from "../lib/api";
+import { formatMoneyInput, parseMoneyInput } from "../lib/utils";
 import { Calendar, MapPin, Clock, Trophy, Star, TrendingUp, ArrowLeft, CheckCircle2, X, Search, ArrowUpDown, Crown } from "lucide-react";
 
 interface Player {
@@ -367,12 +368,12 @@ export default function EventDetailPage() {
               <div>
                 <label className="block text-xs text-gray-400 mb-1">Monto de apuesta (COP)</label>
                 <input
-                  type="number"
-                  value={betAmount}
-                  onChange={(e) => setBetAmount(e.target.value)}
+                  type="text"
+                  inputMode="numeric"
+                  value={formatMoneyInput(betAmount)}
+                  onChange={(e) => setBetAmount(parseMoneyInput(e.target.value))}
                   className="w-full bg-[#0a0a0a] border border-gray-700 rounded-lg px-4 py-3 text-white focus:border-[#b8860b] focus:outline-none text-lg font-bold"
                   placeholder="10.000"
-                  min="1000" step="1000"
                 />
                 <div className="flex gap-2 mt-2">
                   {[5000, 10000, 20000, 50000, 100000].map((amt) => (
