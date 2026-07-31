@@ -145,7 +145,7 @@ export default function HomePage() {
       </div>
 
       {/* Responsible Gaming */}
-      <div className="card-dark rounded-xl p-5 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+      <div className="card-dark rounded-xl p-5 hidden sm:flex flex-col sm:flex-row items-start sm:items-center gap-4">
         <Shield size={32} className="text-[#b8860b] shrink-0" />
         <div>
           <h3 className="font-bold text-white text-sm">Juego Responsable</h3>
