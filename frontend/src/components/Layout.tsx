@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { getUser, clearToken, api, setUser } from "../lib/api";
 import {
-  Home, Calendar, Wallet, Trophy, Shield, Menu, X, LogOut, User, Bell,
+  Home, Calendar, Wallet, Trophy, Shield, X, LogOut, User, Bell,
   CheckCircle, XCircle, DollarSign, Megaphone, AlertTriangle,
 } from "lucide-react";
 
@@ -66,7 +66,6 @@ function playNotificationSound(type: SoundType) {
 }
 
 export default function Layout({ children }: { children: React.ReactNode }) {
-  const [menuOpen, setMenuOpen] = useState(false);
   const [showNotifs, setShowNotifs] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -290,61 +289,22 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 </div>
               )}
             </div>
-            <button
-              onClick={handleLogout}
-              className="hidden md:flex items-center gap-1 text-gray-400 hover:text-red-400 transition-colors text-sm"
-            >
-              <LogOut size={16} />
-            </button>
-            <button
-              className="md:hidden text-gray-400"
-              onClick={() => setMenuOpen(!menuOpen)}
-            >
-              {menuOpen ? <X size={24} /> : <Menu size={24} />}
-            </button>
           </div>
         </div>
 
-        {/* Mobile menu */}
-        {menuOpen && (
-          <div className="md:hidden bg-[#111] border-t border-[#b8860b]/20 px-4 py-3 space-y-1">
-            {user && (
-              <div className="flex items-center gap-2 px-3 py-2 mb-2 bg-[#b8860b]/10 rounded-lg">
-                <Wallet size={16} className="text-[#ffd700]" />
-                <span className="text-[#ffd700] font-semibold text-sm">
-                  ${user.balance?.toLocaleString("es-CO")} COP
-                </span>
-                <span className="text-gray-500 text-xs ml-auto">{user.username}</span>
-              </div>
-            )}
-            {navItems.map((item) => (
-              <Link
-                key={item.path}
-                to={item.path}
-                onClick={() => setMenuOpen(false)}
-                className={`flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium ${
-                  isActive(item.path)
-                    ? "bg-[#b8860b]/20 text-[#ffd700]"
-                    : "text-gray-400 hover:text-[#daa520]"
-                }`}
-              >
-                <item.icon size={18} />
-                {item.label}
-              </Link>
-            ))}
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium text-red-400 w-full"
-            >
-              <LogOut size={18} />
-              Cerrar Sesion
-            </button>
-          </div>
-        )}
       </header>
 
       {/* Main */}
       <main className="max-w-7xl mx-auto px-4 py-6">{children}</main>
+
+      {/* Cerrar sesion flotante, encima de la burbuja de WhatsApp */}
+      <button
+        onClick={handleLogout}
+        aria-label="Cerrar sesion"
+        className="fixed bottom-36 right-5 z-40 md:bottom-24 md:right-8 w-14 h-14 rounded-full bg-[#1a1a1a] border border-red-500/40 text-red-400 flex items-center justify-center shadow-lg hover:scale-110 transition-transform duration-200"
+      >
+        <LogOut size={24} />
+      </button>
 
       {/* Mobile bottom nav */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 bg-[#0d0d0d] border-t border-[#b8860b]/30 z-50">
