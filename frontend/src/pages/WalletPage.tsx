@@ -144,7 +144,6 @@ export default function WalletPage() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-6 pb-20 md:pb-0">
-      <h1 className="text-2xl font-bold text-white">Mi Billetera</h1>
       {success && <div className="bg-green-500/10 border border-green-500/30 text-green-400 text-sm rounded-lg p-3 text-center">{success}</div>}
 
       {/* Balance */}
