@@ -305,7 +305,7 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 max-w-3xl mx-auto">
             {[
               { name: "Nequi", logo: "/nequi-logo.png", color: "from-purple-600/20 to-purple-900/10", border: "border-purple-500/30", text: "text-purple-400" },
-              { name: "Daviplata", logo: "/daviplata-logo.png", color: "from-red-600/20 to-red-900/10", border: "border-red-500/30", text: "text-red-400" },
+              { name: "Bre-B", logo: "/breb-logo.png", color: "from-emerald-600/20 to-emerald-900/10", border: "border-emerald-500/30", text: "text-emerald-400" },
               { name: "Bancolombia", logo: "/bancolombia-logo.png", color: "from-yellow-600/20 to-yellow-900/10", border: "border-yellow-500/30", text: "text-yellow-400" },
             ].map((m, i) => (
               <RevealSection key={i} delay={i * 150}>

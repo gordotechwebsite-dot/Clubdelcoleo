@@ -85,7 +85,7 @@ class BetCreate(BaseModel):
 # Wallet Models
 class DepositRequest(BaseModel):
     amount: float
-    method: str  # nequi, daviplata, bancolombia
+    method: str  # nequi, breb, bancolombia
     reference: str
 
 
@@ -102,7 +102,7 @@ class UserStatusUpdate(BaseModel):
 # Withdrawal Models
 class WithdrawalRequest(BaseModel):
     amount: float
-    method: str  # nequi, daviplata, bancolombia
+    method: str  # nequi, breb, bancolombia
     account_number: str
 
 

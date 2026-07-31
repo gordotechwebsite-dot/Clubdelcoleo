@@ -15,12 +15,31 @@ interface WithdrawalRequest {
 }
 
 const METHODS = [
-  { key: "nequi", label: "Nequi", icon: Smartphone, color: "text-purple-400", bg: "bg-purple-500/10", border: "border-purple-500/30", number: "Nequi: 300-000-0000" },
-  { key: "daviplata", label: "Daviplata", icon: CreditCard, color: "text-red-400", bg: "bg-red-500/10", border: "border-red-500/30", number: "Daviplata: 311-000-0000" },
-  { key: "bancolombia", label: "Bancolombia", icon: Building2, color: "text-yellow-400", bg: "bg-yellow-500/10", border: "border-yellow-500/30", number: "Cuenta: 000-000000-00" },
+  {
+    key: "nequi", label: "Nequi", icon: Smartphone, color: "text-purple-400",
+    bg: "bg-purple-500/10", border: "border-purple-500/30", number: "Nequi: 324 625 0383",
+    details: [
+      { label: "Numero Nequi", value: "3246250383" },
+    ],
+  },
+  {
+    key: "breb", label: "Bre-B", icon: CreditCard, color: "text-emerald-400",
+    bg: "bg-emerald-500/10", border: "border-emerald-500/30", number: "Llave: 324 625 0383",
+    details: [
+      { label: "Llave Bre-B", value: "3246250383" },
+    ],
+  },
+  {
+    key: "bancolombia", label: "Bancolombia", icon: Building2, color: "text-yellow-400",
+    bg: "bg-yellow-500/10", border: "border-yellow-500/30", number: "Ahorros: 617 0000 1377",
+    details: [
+      { label: "Cuenta de ahorros", value: "61700001377" },
+    ],
+  },
 ];
 
 type WalletTab = "depositar" | "retirar" | "solicitudes" | "historial";
+type DepositStep = "metodo" | "monto" | "pago";
 
 export default function WalletPage() {
   const [balance, setBalance] = useState(0);
@@ -32,6 +51,7 @@ export default function WalletPage() {
   const [method, setMethod] = useState("");
   const [amount, setAmount] = useState("");
   const [comprobante, setComprobante] = useState<File | null>(null);
+  const [depositStep, setDepositStep] = useState<DepositStep>("metodo");
   const [depositing, setDepositing] = useState(false);
   const [wMethod, setWMethod] = useState("");
   const [wAmount, setWAmount] = useState("");
@@ -54,6 +74,14 @@ export default function WalletPage() {
 
   useEffect(() => { loadWallet(); }, []);
 
+  const selectedMethod = METHODS.find((m) => m.key === method);
+
+  const goToPayment = () => {
+    const amt = parseFloat(amount);
+    if (isNaN(amt) || amt < 5000) { setError("Deposito minimo: $5.000 COP"); return; }
+    setError(""); setDepositStep("pago");
+  };
+
   const handleDeposit = async () => {
     const amt = parseFloat(amount);
     if (!method) { setError("Selecciona un metodo de pago"); return; }
@@ -63,7 +91,7 @@ export default function WalletPage() {
     try {
       await api.deposit({ amount: amt, method, comprobante });
       setSuccess("Solicitud de recarga enviada. Pendiente de aprobacion.");
-      setAmount(""); setComprobante(null); setMethod(""); setActiveTab("solicitudes");
+      setAmount(""); setComprobante(null); setMethod(""); setDepositStep("metodo"); setActiveTab("solicitudes");
       loadWallet();
       setTimeout(() => setSuccess(""), 6000);
     } catch (err) { setError(err instanceof Error ? err.message : "Error en la recarga"); } finally { setDepositing(false); }
@@ -154,67 +182,115 @@ export default function WalletPage() {
       {activeTab === "depositar" && (
         <div className="card-dark rounded-xl p-5 space-y-4">
           <h3 className="font-bold text-white">Cargar Saldo</h3>
-          <p className="text-xs text-gray-500">Tu solicitud sera revisada y aprobada por un administrador.</p>
-          <div>
-            <label className="block text-xs text-gray-400 mb-2">Metodo de Pago</label>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              {METHODS.map((m) => (
-                <button key={m.key} onClick={() => setMethod(m.key)}
-                  className={`flex items-center gap-2 p-3 rounded-lg border text-sm transition ${
-                    method === m.key ? `${m.bg} ${m.border} ${m.color}` : "bg-[#0a0a0a] border-gray-700 text-gray-400 hover:border-gray-600"
-                  }`}>
-                  <m.icon size={18} />
-                  <div className="text-left">
-                    <p className="font-medium">{m.label}</p>
-                    <p className="text-xs opacity-60">{m.number}</p>
+
+          {depositStep === "metodo" && (
+            <>
+              <p className="text-xs text-gray-500">Paso 1 de 3 - Elige como vas a pagar.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {METHODS.map((m) => (
+                  <button key={m.key} onClick={() => { setMethod(m.key); setError(""); setDepositStep("monto"); }}
+                    className={`flex items-center gap-2 p-3 rounded-lg border text-sm transition ${
+                      method === m.key ? `${m.bg} ${m.border} ${m.color}` : "bg-[#0a0a0a] border-gray-700 text-gray-400 hover:border-gray-600"
+                    }`}>
+                    <m.icon size={18} />
+                    <div className="text-left">
+                      <p className="font-medium">{m.label}</p>
+                      <p className="text-xs opacity-60">{m.number}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {depositStep === "monto" && selectedMethod && (
+            <>
+              <p className="text-xs text-gray-500">Paso 2 de 3 - Digita cuanto vas a recargar por {selectedMethod.label}.</p>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Monto (COP)</label>
+                <input type="text" inputMode="numeric" autoFocus value={formatMoneyInput(amount)}
+                  onChange={(e) => setAmount(parseMoneyInput(e.target.value))}
+                  className="w-full bg-[#0a0a0a] border border-gray-700 rounded-lg px-4 py-3 text-white focus:border-[#b8860b] focus:outline-none text-lg font-bold"
+                  placeholder="50.000" />
+                <div className="flex gap-2 mt-2">
+                  {[10000, 20000, 50000, 100000].map((amt) => (
+                    <button key={amt} onClick={() => setAmount(String(amt))}
+                      className="flex-1 bg-[#1a1a1a] border border-gray-700 rounded-md py-1.5 text-xs text-gray-400 hover:border-[#b8860b] hover:text-[#ffd700] transition">
+                      ${(amt / 1000)}K
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {error && <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-xs rounded-lg p-2 text-center">{error}</div>}
+              <div className="flex gap-2">
+                <button onClick={() => { setError(""); setDepositStep("metodo"); }}
+                  className="px-4 py-3 rounded-lg border border-gray-700 text-gray-400 text-sm hover:border-gray-600">
+                  Atras
+                </button>
+                <button onClick={goToPayment}
+                  className="flex-1 gold-gradient text-black font-bold py-3 rounded-lg hover:opacity-90 transition text-sm">
+                  Proceder con el pago
+                </button>
+              </div>
+            </>
+          )}
+
+          {depositStep === "pago" && selectedMethod && (
+            <>
+              <p className="text-xs text-gray-500">Paso 3 de 3 - Transfiere el monto exacto y confirma.</p>
+              <div className={`rounded-lg border p-4 space-y-2 ${selectedMethod.bg} ${selectedMethod.border}`}>
+                <div className={`flex items-center gap-2 ${selectedMethod.color}`}>
+                  <selectedMethod.icon size={18} />
+                  <p className="font-bold">{selectedMethod.label}</p>
+                </div>
+                {selectedMethod.details.map((d) => (
+                  <div key={d.label} className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-gray-400">{d.label}</span>
+                    <span className="text-sm text-white font-bold">{d.value}</span>
                   </div>
+                ))}
+                <div className="flex items-center justify-between gap-2 border-t border-gray-700/60 pt-2">
+                  <span className="text-xs text-gray-400">Monto a pagar</span>
+                  <span className="text-lg gold-text font-black">${formatMoneyInput(amount)} COP</span>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Comprobante de Pago</label>
+                <label className={`flex items-center justify-center gap-2 w-full border-2 border-dashed rounded-lg px-4 py-4 cursor-pointer transition ${
+                  comprobante ? "border-[#b8860b] bg-[#b8860b]/10" : "border-gray-700 bg-[#0a0a0a] hover:border-gray-500"
+                }`}>
+                  <input type="file" accept="image/*,.pdf" className="hidden"
+                    onChange={(e) => { if (e.target.files?.[0]) setComprobante(e.target.files[0]); }} />
+                  {comprobante ? (
+                    <>
+                      <ImageIcon size={18} className="text-[#ffd700]" />
+                      <span className="text-sm text-[#ffd700] font-medium truncate">{comprobante.name}</span>
+                      <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setComprobante(null); }}
+                        className="text-red-400 hover:text-red-300 ml-2"><XCircle size={16} /></button>
+                    </>
+                  ) : (
+                    <>
+                      <Upload size={20} className="text-gray-500" />
+                      <span className="text-sm text-gray-500">Toca para subir foto o captura del pago</span>
+                    </>
+                  )}
+                </label>
+                <p className="text-xs text-gray-600 mt-1">JPG, PNG, WebP o PDF</p>
+              </div>
+              <p className="text-xs text-gray-500">Tu solicitud sera revisada y aprobada por un administrador.</p>
+              {error && <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-xs rounded-lg p-2 text-center">{error}</div>}
+              <div className="flex gap-2">
+                <button onClick={() => { setError(""); setDepositStep("monto"); }}
+                  className="px-4 py-3 rounded-lg border border-gray-700 text-gray-400 text-sm hover:border-gray-600">
+                  Atras
                 </button>
-              ))}
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs text-gray-400 mb-1">Monto (COP)</label>
-            <input type="text" inputMode="numeric" value={formatMoneyInput(amount)}
-              onChange={(e) => setAmount(parseMoneyInput(e.target.value))}
-              className="w-full bg-[#0a0a0a] border border-gray-700 rounded-lg px-4 py-3 text-white focus:border-[#b8860b] focus:outline-none text-lg font-bold"
-              placeholder="50.000" />
-            <div className="flex gap-2 mt-2">
-              {[10000, 20000, 50000, 100000].map((amt) => (
-                <button key={amt} onClick={() => setAmount(String(amt))}
-                  className="flex-1 bg-[#1a1a1a] border border-gray-700 rounded-md py-1.5 text-xs text-gray-400 hover:border-[#b8860b] hover:text-[#ffd700] transition">
-                  ${(amt / 1000)}K
+                <button onClick={handleDeposit} disabled={depositing}
+                  className="flex-1 gold-gradient text-black font-bold py-3 rounded-lg hover:opacity-90 transition disabled:opacity-50 text-sm">
+                  {depositing ? "Enviando..." : "Ya he pagado"}
                 </button>
-              ))}
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs text-gray-400 mb-1">Comprobante de Pago</label>
-            <label className={`flex items-center justify-center gap-2 w-full border-2 border-dashed rounded-lg px-4 py-4 cursor-pointer transition ${
-              comprobante ? "border-[#b8860b] bg-[#b8860b]/10" : "border-gray-700 bg-[#0a0a0a] hover:border-gray-500"
-            }`}>
-              <input type="file" accept="image/*,.pdf" className="hidden"
-                onChange={(e) => { if (e.target.files?.[0]) setComprobante(e.target.files[0]); }} />
-              {comprobante ? (
-                <>
-                  <ImageIcon size={18} className="text-[#ffd700]" />
-                  <span className="text-sm text-[#ffd700] font-medium truncate">{comprobante.name}</span>
-                  <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setComprobante(null); }}
-                    className="text-red-400 hover:text-red-300 ml-2"><XCircle size={16} /></button>
-                </>
-              ) : (
-                <>
-                  <Upload size={20} className="text-gray-500" />
-                  <span className="text-sm text-gray-500">Toca para subir foto o captura del pago</span>
-                </>
-              )}
-            </label>
-            <p className="text-xs text-gray-600 mt-1">JPG, PNG, WebP o PDF</p>
-          </div>
-          {error && <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-xs rounded-lg p-2 text-center">{error}</div>}
-          <button onClick={handleDeposit} disabled={depositing}
-            className="w-full gold-gradient text-black font-bold py-3 rounded-lg hover:opacity-90 transition disabled:opacity-50 text-sm">
-            {depositing ? "Enviando..." : "Enviar Solicitud de Recarga"}
-          </button>
+              </div>
+            </>
+          )}
         </div>
       )}
 
