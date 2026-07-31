@@ -392,7 +392,7 @@ async def place_bet(bet: BetCreate, user=Depends(get_current_user)):
             raise HTTPException(status_code=400, detail="Evento no disponible para apuestas")
 
         # Check event max bet amount
-        max_bet = event.get("max_bet_amount") or 500000
+        max_bet = dict(event).get("max_bet_amount") or 500000
         if bet.amount > max_bet:
             raise HTTPException(status_code=400, detail=f"Apuesta maxima para este evento: ${int(max_bet):,} COP")
 
