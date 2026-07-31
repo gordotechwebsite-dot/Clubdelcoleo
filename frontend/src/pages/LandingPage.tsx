@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Shield, Trophy, Smartphone, Users, Zap, Lock, Star, ChevronRight, MapPin, Calendar, Clock } from "lucide-react";
+import { Shield, Trophy, Smartphone, Users, Zap, Lock, Star, ChevronRight } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 function useScrollReveal() {
@@ -36,14 +36,6 @@ function RevealSection({ children, className = "", delay = 0 }: { children: Reac
 }
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
-
-function formatTime12(t: string) {
-  if (!t) return "";
-  const [h, m] = t.split(":").map(Number);
-  const suffix = h >= 12 ? "PM" : "AM";
-  const h12 = h % 12 || 12;
-  return `${h12}:${String(m).padStart(2, "0")} ${suffix}`;
-}
 
 function formatDateShort(d: string) {
   if (!d) return "";
@@ -166,18 +158,8 @@ export default function LandingPage() {
                       <p className="text-black font-black text-sm text-center truncate">{ev.name}</p>
                     </div>
                     <div className="p-5 flex flex-col gap-3 flex-1">
-                      <div className="flex items-start gap-2">
-                        <MapPin size={16} className="text-[#b8860b] mt-0.5 flex-shrink-0" />
-                        <p className="text-gray-300 text-sm">{ev.location}</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Calendar size={16} className="text-[#b8860b] flex-shrink-0" />
-                        <p className="text-gray-300 text-sm">{formatDateShort(ev.date)}</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Clock size={16} className="text-[#b8860b] flex-shrink-0" />
-                        <p className="text-gray-300 text-sm">{formatTime12(ev.time)}</p>
-                      </div>
+                      <p className="text-gray-300 text-sm">{ev.location}</p>
+                      <p className="text-gray-300 text-sm">{formatDateShort(ev.date)}</p>
                     </div>
                   </div>
                 </RevealSection>
