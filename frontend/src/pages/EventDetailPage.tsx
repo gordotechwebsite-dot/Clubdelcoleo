@@ -283,7 +283,6 @@ export default function EventDetailPage() {
       <div className="space-y-3">
         <h2 className="text-lg font-bold text-white flex items-center gap-2">
           <Trophy size={18} className="text-[#ffd700]" /> Coleadores Participantes
-          <span className="text-xs text-gray-500 font-normal ml-1">({filteredPlayers.length} de {event.players.length})</span>
         </h2>
         <div className="space-y-2">
           {filteredPlayers.map((player) => (
