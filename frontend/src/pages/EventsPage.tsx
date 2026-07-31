@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api";
-import { Calendar, MapPin, Clock, ChevronRight, Search } from "lucide-react";
+import { ChevronRight, Search } from "lucide-react";
 
 interface Event {
   id: number; name: string; description: string; location: string;
@@ -26,15 +26,8 @@ export default function EventsPage() {
   );
 
   const formatDate = (d: string) => {
-    const date = new Date(d + "T00:00:00");
-    return date.toLocaleDateString("es-CO", { weekday: "short", day: "numeric", month: "short" });
-  };
-
-  const formatTime12 = (t: string) => {
-    const [h, m] = t.split(":").map(Number);
-    const suffix = h >= 12 ? "PM" : "AM";
-    const hour12 = h % 12 || 12;
-    return `${hour12}:${String(m).padStart(2, "0")} ${suffix}`;
+    const date = new Date(d + "T00:00:00-05:00");
+    return date.toLocaleDateString("es-CO", { weekday: "short", day: "numeric", month: "short", timeZone: "America/Bogota" });
   };
 
   return (
@@ -117,18 +110,8 @@ export default function EventsPage() {
                 </div>
                 <p className="text-gray-400 text-xs line-clamp-2">{event.description}</p>
                 <div className="space-y-1 text-xs text-gray-400">
-                  <div className="flex items-center gap-2">
-                    <Calendar size={13} className="text-[#b8860b]" />
-                    <span className="capitalize">{formatDate(event.date)}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Clock size={13} className="text-[#b8860b]" />
-                    <span>{formatTime12(event.time)}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <MapPin size={13} className="text-[#b8860b]" />
-                    <span>{event.location}</span>
-                  </div>
+                  <p className="capitalize">{formatDate(event.date)}</p>
+                  <p>{event.location}</p>
                 </div>
                 {event.status === "upcoming" && (
                   <div className="pt-2 border-t border-gray-800">

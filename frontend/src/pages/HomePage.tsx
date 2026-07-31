@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, getUser } from "../lib/api";
-import { Calendar, MapPin, Clock, ChevronRight, Trophy, Users, Shield, Star } from "lucide-react";
+import { ChevronRight, Trophy, Users, Shield, Star } from "lucide-react";
 
 interface Event {
   id: number; name: string; description: string; location: string;
@@ -18,15 +18,8 @@ export default function HomePage() {
   }, []);
 
   const formatDate = (d: string) => {
-    const date = new Date(d + "T00:00:00");
+    const date = new Date(d + "T00:00:00-05:00");
     return date.toLocaleDateString("es-CO", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "America/Bogota" });
-  };
-
-  const formatTime12 = (t: string) => {
-    const [h, m] = t.split(":").map(Number);
-    const suffix = h >= 12 ? "PM" : "AM";
-    const hour12 = h % 12 || 12;
-    return `${hour12}:${String(m).padStart(2, "0")} ${suffix}`;
   };
 
   return (
@@ -119,18 +112,8 @@ export default function HomePage() {
                   </div>
                   <p className="text-gray-400 text-xs line-clamp-2">{event.description}</p>
                   <div className="space-y-1.5 text-xs text-gray-400">
-                    <div className="flex items-center gap-2">
-                      <Calendar size={14} className="text-[#b8860b]" />
-                      <span className="capitalize">{formatDate(event.date)}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Clock size={14} className="text-[#b8860b]" />
-                      <span>{formatTime12(event.time)}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <MapPin size={14} className="text-[#b8860b]" />
-                      <span>{event.location}</span>
-                    </div>
+                    <p className="capitalize">{formatDate(event.date)}</p>
+                    <p>{event.location}</p>
                   </div>
                   <div className="pt-2 border-t border-gray-800">
                     <span className="text-[#daa520] text-xs font-medium flex items-center gap-1">
