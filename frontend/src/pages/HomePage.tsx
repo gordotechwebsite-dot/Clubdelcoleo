@@ -44,22 +44,6 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Stats Bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          { icon: Shield, label: "Certificada", value: "100% Segura", color: "text-green-400" },
-          { icon: Trophy, label: "Eventos Activos", value: `${events.length}`, color: "text-[#ffd700]" },
-          { icon: Users, label: "Comunidad", value: "Exclusiva", color: "text-blue-400" },
-          { icon: Star, label: "Cuotas", value: "Competitivas", color: "text-purple-400" },
-        ].map((s, i) => (
-          <div key={i} className="card-dark rounded-xl p-4 text-center">
-            <s.icon size={20} className={`${s.color} mx-auto mb-1`} />
-            <p className={`font-bold text-sm ${s.color}`}>{s.value}</p>
-            <p className="text-xs text-gray-500">{s.label}</p>
-          </div>
-        ))}
-      </div>
-
       {/* Upcoming Events */}
       <div>
         <div className="flex items-center justify-between mb-4">
@@ -125,6 +109,22 @@ export default function HomePage() {
             ))}
           </div>
         )}
+      </div>
+
+      {/* Stats Bar */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { icon: Shield, label: "Certificada", value: "100% Segura", color: "text-green-400" },
+          { icon: Trophy, label: "Eventos Activos", value: `${events.length}`, color: "text-[#ffd700]" },
+          { icon: Users, label: "Comunidad", value: "Exclusiva", color: "text-blue-400" },
+          { icon: Star, label: "Cuotas", value: "Competitivas", color: "text-purple-400" },
+        ].map((s, i) => (
+          <div key={i} className="card-dark rounded-xl p-4 text-center">
+            <s.icon size={20} className={`${s.color} mx-auto mb-1`} />
+            <p className={`font-bold text-sm ${s.color}`}>{s.value}</p>
+            <p className="text-xs text-gray-500">{s.label}</p>
+          </div>
+        ))}
       </div>
 
       {/* Responsible Gaming */}

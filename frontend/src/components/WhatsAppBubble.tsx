@@ -1,4 +1,4 @@
-const WHATSAPP_NUMBER = "16692530857";
+const WHATSAPP_NUMBER = "16693779494";
 const WHATSAPP_MESSAGE = "Hola, me interesa Club del Coleo";
 
 export default function WhatsAppBubble() {
