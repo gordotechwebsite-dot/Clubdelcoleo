@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { api, getUser, setUser } from "../lib/api";
 import { formatMoneyInput, parseMoneyInput } from "../lib/utils";
-import { Calendar, MapPin, Clock, Trophy, Star, TrendingUp, ArrowLeft, CheckCircle2, X, Search, ArrowUpDown, Crown } from "lucide-react";
+import { Trophy, Star, TrendingUp, ArrowLeft, CheckCircle2, X, Search, ArrowUpDown, Crown } from "lucide-react";
 
 interface Player {
   id: number; name: string; nickname: string; team: string; odds: number;
@@ -207,7 +207,7 @@ export default function EventDetailPage() {
               <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500" />
             </span>
             <span className="text-white font-bold text-sm tracking-wide group-hover:text-cyan-300 transition">
-              EVENTO EN VIVO: {formatDate(event.date).toUpperCase()}
+              TRANSMISION EN VIVO
             </span>
           </div>
         </a>
@@ -230,9 +230,9 @@ export default function EventDetailPage() {
           </div>
           <p className="text-gray-400 text-sm">{event.description}</p>
           <div className="flex flex-wrap gap-4 text-sm text-gray-400">
-            <span className="flex items-center gap-1.5"><Calendar size={14} className="text-[#b8860b]" /> <span className="capitalize">{formatDate(event.date)}</span></span>
-            <span className="flex items-center gap-1.5"><Clock size={14} className="text-[#b8860b]" /> {formatTime12(event.time)}</span>
-            <span className="flex items-center gap-1.5"><MapPin size={14} className="text-[#b8860b]" /> {event.location}</span>
+            <span className="capitalize">{formatDate(event.date)}</span>
+            <span>{formatTime12(event.time)}</span>
+            <span>{event.location}</span>
           </div>
         </div>
       </div>
