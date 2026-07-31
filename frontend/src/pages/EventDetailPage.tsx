@@ -70,13 +70,6 @@ export default function EventDetailPage() {
     return date.toLocaleDateString("es-CO", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "America/Bogota" });
   };
 
-  const formatTime12 = (t: string) => {
-    const [h, m] = t.split(":").map(Number);
-    const suffix = h >= 12 ? "PM" : "AM";
-    const hour12 = h % 12 || 12;
-    return `${hour12}:${String(m).padStart(2, "0")} ${suffix}`;
-  };
-
   const formatCOP = (n: number) => n.toLocaleString("es-CO");
 
   const handleBet = async () => {
@@ -231,7 +224,6 @@ export default function EventDetailPage() {
           <p className="text-gray-400 text-sm">{event.description}</p>
           <div className="flex flex-wrap gap-4 text-sm text-gray-400">
             <span className="capitalize">{formatDate(event.date)}</span>
-            <span>{formatTime12(event.time)}</span>
             <span>{event.location}</span>
           </div>
         </div>
