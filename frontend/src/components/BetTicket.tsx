@@ -38,12 +38,17 @@ export default function BetTicket({ bet }: { bet: BetData }) {
   return (
     <div className="max-w-md mx-auto">
       {/* Ticket */}
-      <div ref={ticketRef} className="bg-gradient-to-b from-[#1a1708] to-[#0f0f0f] border border-[#b8860b]/40 rounded-2xl overflow-hidden shadow-2xl shadow-[#b8860b]/10">
+      <div ref={ticketRef} className="relative bg-gradient-to-b from-[#1a1708] to-[#0f0f0f] border border-[#b8860b]/40 rounded-2xl overflow-hidden shadow-2xl shadow-[#b8860b]/10">
+        {/* Marca de agua */}
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+          <span className="-rotate-[30deg] whitespace-nowrap text-3xl font-black tracking-widest text-[#ffd700]/[0.06]">
+            playdelcoleo.co
+          </span>
+        </div>
         {/* Header */}
         <div className="gold-gradient p-4 text-center relative">
           <div className="absolute top-2 left-3 text-black/30 text-xs font-mono">CDC</div>
           <div className="absolute top-2 right-3 text-black/30 text-xs font-mono">CDC</div>
-          <img src="/logo-gold.png" alt="Club del Coleo" className="h-14 mx-auto mb-1" />
           <p className="text-black/60 text-xs font-medium">TALON DE APUESTA OFICIAL</p>
         </div>
 
@@ -134,7 +139,7 @@ export default function BetTicket({ bet }: { bet: BetData }) {
               Emitido: {formatDate(bet.created_at)} {formatTime(bet.created_at)}
             </p>
           )}
-          <p className="text-xs text-gray-700">clubdelcoleo.com | +18</p>
+          <p className="text-xs text-gray-700">playdelcoleo.co | +18</p>
         </div>
       </div>
 
