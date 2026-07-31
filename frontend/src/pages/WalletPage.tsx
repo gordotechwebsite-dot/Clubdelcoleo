@@ -17,21 +17,21 @@ interface WithdrawalRequest {
 const METHODS = [
   {
     key: "nequi", label: "Nequi", icon: Smartphone, color: "text-purple-400",
-    bg: "bg-purple-500/10", border: "border-purple-500/30", number: "Nequi: 324 625 0383",
+    bg: "bg-purple-500/10", border: "border-purple-500/30",
     details: [
       { label: "Numero Nequi", value: "3246250383" },
     ],
   },
   {
     key: "breb", label: "Bre-B", icon: CreditCard, color: "text-emerald-400",
-    bg: "bg-emerald-500/10", border: "border-emerald-500/30", number: "Llave: 324 625 0383",
+    bg: "bg-emerald-500/10", border: "border-emerald-500/30",
     details: [
       { label: "Llave Bre-B", value: "3246250383" },
     ],
   },
   {
     key: "bancolombia", label: "Bancolombia", icon: Building2, color: "text-yellow-400",
-    bg: "bg-yellow-500/10", border: "border-yellow-500/30", number: "Ahorros: 617 0000 1377",
+    bg: "bg-yellow-500/10", border: "border-yellow-500/30",
     details: [
       { label: "Cuenta de ahorros", value: "61700001377" },
     ],
@@ -167,12 +167,11 @@ export default function WalletPage() {
           { key: "historial" as WalletTab, label: "Historial", icon: Clock },
         ]).map((tab) => (
           <button key={tab.key} onClick={() => { setActiveTab(tab.key); setError(""); }}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs sm:text-sm font-medium transition ${
+            className={`flex-1 min-w-0 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 px-1 py-2 sm:py-2.5 rounded-lg text-[11px] sm:text-sm font-medium transition ${
               activeTab === tab.key ? "bg-[#b8860b]/20 text-[#ffd700]" : "text-gray-500 hover:text-gray-300"
             }`}>
-            <tab.icon size={14} />
-            <span className="hidden sm:inline">{tab.label}</span>
-            <span className="sm:hidden">{tab.label.slice(0, 4)}</span>
+            <tab.icon size={16} className="shrink-0" />
+            <span className="leading-tight">{tab.label}</span>
           </button>
         ))}
       </div>
@@ -192,10 +191,7 @@ export default function WalletPage() {
                       method === m.key ? `${m.bg} ${m.border} ${m.color}` : "bg-[#0a0a0a] border-gray-700 text-gray-400 hover:border-gray-600"
                     }`}>
                     <m.icon size={18} />
-                    <div className="text-left">
-                      <p className="font-medium">{m.label}</p>
-                      <p className="text-xs opacity-60">{m.number}</p>
-                    </div>
+                    <p className="font-medium">{m.label}</p>
                   </button>
                 ))}
               </div>
