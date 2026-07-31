@@ -47,13 +47,13 @@ export default function EventDetailPage() {
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       players = players.filter(p =>
-        p.name.toLowerCase().includes(q) || p.nickname.toLowerCase().includes(q) || p.team.toLowerCase().includes(q)
+        (p.name || "").toLowerCase().includes(q) || (p.nickname || "").toLowerCase().includes(q) || (p.team || "").toLowerCase().includes(q)
       );
     }
     switch (sortBy) {
       case "odds_asc": players.sort((a, b) => a.odds - b.odds); break;
       case "odds_desc": players.sort((a, b) => b.odds - a.odds); break;
-      case "name": players.sort((a, b) => a.name.localeCompare(b.name)); break;
+      case "name": players.sort((a, b) => (a.name || "").localeCompare(b.name || "")); break;
       case "rating": players.sort((a, b) => b.rating - a.rating); break;
       default: players.sort((a, b) => a.position - b.position);
     }
@@ -260,7 +260,8 @@ export default function EventDetailPage() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Buscar coleador por nombre o apodo..."
-            className="w-full bg-[#111] border border-gray-700 rounded-lg pl-9 pr-4 py-2.5 text-white text-sm focus:border-[#b8860b] focus:outline-none"
+            autoComplete="off"
+            className="w-full bg-[#111] border border-gray-700 rounded-lg pl-9 pr-4 py-2.5 text-white text-base sm:text-sm focus:border-[#b8860b] focus:outline-none"
           />
         </div>
         <div className="relative">
@@ -268,7 +269,7 @@ export default function EventDetailPage() {
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-            className="w-full sm:w-auto bg-[#111] border border-gray-700 rounded-lg pl-8 pr-4 py-2.5 text-white text-sm focus:border-[#b8860b] focus:outline-none appearance-none cursor-pointer"
+            className="w-full sm:w-auto bg-[#111] border border-gray-700 rounded-lg pl-8 pr-4 py-2.5 text-white text-base sm:text-sm focus:border-[#b8860b] focus:outline-none appearance-none cursor-pointer"
           >
             <option value="position">Posicion</option>
             <option value="odds_asc">Cuota: Menor a Mayor</option>
@@ -285,6 +286,11 @@ export default function EventDetailPage() {
           <Trophy size={18} className="text-[#ffd700]" /> Coleadores Participantes
         </h2>
         <div className="space-y-2">
+          {filteredPlayers.length === 0 && (
+            <div className="card-dark rounded-xl p-6 text-center text-gray-500 text-sm">
+              No se encontraron coleadores con esa busqueda.
+            </div>
+          )}
           {filteredPlayers.map((player) => (
             <button
               key={player.id}
