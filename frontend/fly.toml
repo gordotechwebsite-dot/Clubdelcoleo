@@ -3,7 +3,7 @@ primary_region = "iad"
 
 [build]
   [build.args]
-    VITE_API_URL = "https://clubdelcoleo-api.fly.dev"
+    VITE_API_URL = "https://api.playdelcoleo.co"
 
 [http_service]
   internal_port = 80
