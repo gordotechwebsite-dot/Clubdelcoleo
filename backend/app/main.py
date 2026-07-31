@@ -528,13 +528,7 @@ async def deposit(
         raise HTTPException(status_code=400, detail="Monto debe ser mayor a 0")
     if amount < 5000:
         raise HTTPException(status_code=400, detail="Deposito minimo: $5,000 COP")
-<<<<<<< HEAD
-    if method not in ["nequi", "daviplata", "bancolombia"]:
-||||||| parent of 843aa78 (feat: recarga en 3 pasos con datos de pago y Bre-B en vez de Daviplata)
-    if req.method not in ["nequi", "daviplata", "bancolombia"]:
-=======
-    if req.method not in ["nequi", "breb", "daviplata", "bancolombia"]:
->>>>>>> 843aa78 (feat: recarga en 3 pasos con datos de pago y Bre-B en vez de Daviplata)
+    if method not in ["nequi", "breb", "daviplata", "bancolombia"]:
         raise HTTPException(status_code=400, detail="Metodo de pago no valido")
 
     # Validate file type
@@ -1100,16 +1094,10 @@ async def review_deposit(dep_id: int, data: DepositReview, user=Depends(get_admi
             (data.status, user["id"], now_colombia().isoformat(), dep_id)
         )
 
-<<<<<<< HEAD
-        method_names = {"nequi": "Nequi", "daviplata": "Daviplata", "bancolombia": "Bancolombia"}
+        method_names = {"nequi": "Nequi", "breb": "Bre-B", "daviplata": "Daviplata", "bancolombia": "Bancolombia"}
         dep_user_id = dep["user_id"]
         dep_amount = dep["amount"]
         dep_method = dep["method"]
-||||||| parent of 843aa78 (feat: recarga en 3 pasos con datos de pago y Bre-B en vez de Daviplata)
-        method_names = {"nequi": "Nequi", "daviplata": "Daviplata", "bancolombia": "Bancolombia"}
-=======
-        method_names = {"nequi": "Nequi", "breb": "Bre-B", "daviplata": "Daviplata", "bancolombia": "Bancolombia"}
->>>>>>> 843aa78 (feat: recarga en 3 pasos con datos de pago y Bre-B en vez de Daviplata)
         if data.status == "approved":
             conn.execute(
                 "UPDATE users SET balance = balance + ? WHERE id = ?",
@@ -1183,15 +1171,9 @@ async def review_withdrawal(wd_id: int, data: WithdrawalReview, user=Depends(get
             (data.status, user["id"], now_colombia().isoformat(), wd_id)
         )
 
-<<<<<<< HEAD
-        method_names = {"nequi": "Nequi", "daviplata": "Daviplata", "bancolombia": "Bancolombia"}
+        method_names = {"nequi": "Nequi", "breb": "Bre-B", "daviplata": "Daviplata", "bancolombia": "Bancolombia"}
         wd_user_id = wd["user_id"]
         wd_amount = wd["amount"]
-||||||| parent of 843aa78 (feat: recarga en 3 pasos con datos de pago y Bre-B en vez de Daviplata)
-        method_names = {"nequi": "Nequi", "daviplata": "Daviplata", "bancolombia": "Bancolombia"}
-=======
-        method_names = {"nequi": "Nequi", "breb": "Bre-B", "daviplata": "Daviplata", "bancolombia": "Bancolombia"}
->>>>>>> 843aa78 (feat: recarga en 3 pasos con datos de pago y Bre-B en vez de Daviplata)
         if data.status == "approved":
             conn.execute(
                 "UPDATE users SET balance = balance - ? WHERE id = ?",
