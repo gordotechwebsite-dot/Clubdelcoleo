@@ -3,10 +3,29 @@ import os
 import shutil
 import glob
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 COLOMBIA_TZ = ZoneInfo("America/Bogota")
+
+
+def _timestamp_to_colombia(raw: bytes) -> str:
+    """Return any stored TIMESTAMP as an ISO string in Colombia time.
+
+    Rows written with SQLite CURRENT_TIMESTAMP are naive UTC; without this the
+    clients render them as if they were local time.
+    """
+    value = raw.decode() if isinstance(raw, bytes) else str(raw)
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return value
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(COLOMBIA_TZ).isoformat()
+
+
+sqlite3.register_converter("timestamp", _timestamp_to_colombia)
 
 BACKUP_DIR = "/data/backups" if os.path.isdir("/data") else "backups"
 
@@ -102,7 +121,7 @@ def auto_restore_if_empty():
 
 @contextmanager
 def get_db():
-    conn = sqlite3.connect(get_db_path())
+    conn = sqlite3.connect(get_db_path(), detect_types=sqlite3.PARSE_DECLTYPES)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     try:
