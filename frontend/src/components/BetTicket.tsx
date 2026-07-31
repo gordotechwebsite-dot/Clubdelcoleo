@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Calendar, MapPin, Clock, Trophy, Shield, Hash, Share2, Download } from "lucide-react";
+import { Trophy, Shield, Hash, Share2, Download } from "lucide-react";
 
 interface BetData {
   ticket_code: string; event_name: string; event_date: string; event_time: string;
@@ -26,13 +26,6 @@ export default function BetTicket({ bet }: { bet: BetData }) {
     } catch {
       return "";
     }
-  };
-
-  const formatTime12 = (t: string) => {
-    const [h, m] = t.split(":").map(Number);
-    const suffix = h >= 12 ? "PM" : "AM";
-    const hour12 = h % 12 || 12;
-    return `${hour12}:${String(m).padStart(2, "0")} ${suffix}`;
   };
 
   return (
@@ -72,13 +65,8 @@ export default function BetTicket({ bet }: { bet: BetData }) {
         <div className="px-5 py-3 space-y-2">
           <div className="bg-[#b8860b]/10 rounded-lg p-3 space-y-1.5">
             <p className="font-bold text-[#ffd700] text-sm">{bet.event_name}</p>
-            <div className="flex flex-wrap gap-3 text-xs text-gray-400">
-              <span className="flex items-center gap-1"><Calendar size={11} className="text-[#b8860b]" /> {formatDate(bet.event_date)}</span>
-              <span className="flex items-center gap-1"><Clock size={11} className="text-[#b8860b]" /> {formatTime12(bet.event_time)}</span>
-            </div>
-            <div className="flex items-center gap-1 text-xs text-gray-400">
-              <MapPin size={11} className="text-[#b8860b]" /> {bet.event_location}
-            </div>
+            <p className="text-xs text-gray-400">{formatDate(bet.event_date)}</p>
+            <p className="text-xs text-gray-400">{bet.event_location}</p>
           </div>
         </div>
 
