@@ -173,6 +173,7 @@ def init_db():
                 player_id INTEGER REFERENCES players(id) ON DELETE CASCADE,
                 position INTEGER,
                 odds REAL DEFAULT 2.0,
+                day INTEGER DEFAULT 1,
                 UNIQUE(event_id, player_id)
             );
 
@@ -243,6 +244,11 @@ def init_db():
             conn.execute("ALTER TABLE events ADD COLUMN winner_player_id INTEGER REFERENCES players(id)")
         if "max_bet_amount" not in cols:
             conn.execute("ALTER TABLE events ADD COLUMN max_bet_amount REAL DEFAULT 500000")
+
+        # Migrate: add day (jornada) to event_players if missing
+        ep_cols = [row[1] for row in conn.execute("PRAGMA table_info(event_players)").fetchall()]
+        if "day" not in ep_cols:
+            conn.execute("ALTER TABLE event_players ADD COLUMN day INTEGER DEFAULT 1")
 
         # Migrate: add daily_deposit_limit and max_single_bet to users if missing
         user_cols = [row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()]

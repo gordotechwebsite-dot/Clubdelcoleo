@@ -119,10 +119,12 @@ export const api = {
     request(`/api/players/${id}`, { method: "DELETE" }),
 
   // Event Players
-  addPlayerToEvent: (eventId: number, data: { player_id: number; position?: number; odds: number }) =>
+  addPlayerToEvent: (eventId: number, data: { player_id: number; position?: number; odds: number; day?: number }) =>
     request(`/api/events/${eventId}/players`, { method: "POST", body: JSON.stringify(data) }),
   updatePlayerOdds: (eventId: number, playerId: number, odds: number) =>
     request(`/api/events/${eventId}/players/${playerId}`, { method: "PUT", body: JSON.stringify({ odds }) }),
+  updatePlayerDay: (eventId: number, playerId: number, day: number) =>
+    request(`/api/events/${eventId}/players/${playerId}`, { method: "PUT", body: JSON.stringify({ day }) }),
   removePlayerFromEvent: (eventId: number, playerId: number) =>
     request(`/api/events/${eventId}/players/${playerId}`, { method: "DELETE" }),
 

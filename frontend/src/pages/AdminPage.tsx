@@ -16,7 +16,7 @@ interface Player {
 }
 interface EventPlayer {
   id: number; name: string; nickname: string; team: string; position: number;
-  odds: number; rating: number; stats_wins: number; stats_losses: number;
+  odds: number; rating: number; stats_wins: number; stats_losses: number; day: number;
 }
 interface UserData {
   id: number; username: string; email: string; full_name: string; phone: string;
@@ -180,7 +180,7 @@ function EventsPanel({ events, players, reload, showMsg, loadPlayers }: {
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ name: "", description: "", location: "", country: "colombia", date: "", time: "", stream_url: "" });
   const [expanded, setExpanded] = useState<number | null>(null);
-  const [addPlayer, setAddPlayer] = useState<{ eventId: number; playerId: string; odds: string } | null>(null);
+  const [addPlayer, setAddPlayer] = useState<{ eventId: number; playerId: string; odds: string; day: string } | null>(null);
   const [editEvent, setEditEvent] = useState<{ id: number; name: string; date: string; time: string; location: string; description: string } | null>(null);
   const [savingOdds, setSavingOdds] = useState<number | null>(null);
   const oddsRefs = {} as Record<number, HTMLInputElement | null>;
@@ -234,9 +234,10 @@ function EventsPanel({ events, players, reload, showMsg, loadPlayers }: {
     if (!addPlayer) return;
     const playerId = parseInt(addPlayer.playerId);
     const odds = parseFloat(addPlayer.odds);
+    const day = parseInt(addPlayer.day) || 1;
     if (isNaN(playerId) || isNaN(odds) || odds <= 1) { showMsg("Datos invalidos"); return; }
     try {
-      await api.addPlayerToEvent(addPlayer.eventId, { player_id: playerId, odds });
+      await api.addPlayerToEvent(addPlayer.eventId, { player_id: playerId, odds, day });
       showMsg("Jugador agregado al evento");
       setAddPlayer(null);
       reload();
@@ -381,7 +382,7 @@ function EventsPanel({ events, players, reload, showMsg, loadPlayers }: {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <p className="text-xs text-gray-400 font-medium">Jugadores y Cuotas</p>
-                    <button onClick={() => setAddPlayer({ eventId: event.id, playerId: "", odds: "2.0" })}
+                    <button onClick={() => setAddPlayer({ eventId: event.id, playerId: "", odds: "2.0", day: "1" })}
                       className="flex items-center gap-1 text-xs text-[#ffd700] hover:text-[#b8860b]">
                       <Plus size={12} /> Agregar
                     </button>
@@ -396,6 +397,8 @@ function EventsPanel({ events, players, reload, showMsg, loadPlayers }: {
                       </select>
                       <input placeholder="Cuota" value={addPlayer.odds} onChange={(e) => setAddPlayer({ ...addPlayer, odds: e.target.value })}
                         className="w-20 bg-[#1a1a1a] border border-gray-700 rounded text-xs text-white p-1.5" />
+                      <input placeholder="Dia" value={addPlayer.day} onChange={(e) => setAddPlayer({ ...addPlayer, day: e.target.value })}
+                        className="w-14 bg-[#1a1a1a] border border-gray-700 rounded text-xs text-white p-1.5" />
                       <button onClick={handleAddPlayer} className="text-green-400 hover:text-green-300"><Save size={14} /></button>
                       <button onClick={() => setAddPlayer(null)} className="text-red-400 hover:text-red-300"><X size={14} /></button>
                     </div>
@@ -406,6 +409,7 @@ function EventsPanel({ events, players, reload, showMsg, loadPlayers }: {
                       <div className="flex items-center gap-2 min-w-0 flex-1">
                         <span className="text-xs text-gray-400 shrink-0">#{p.position}</span>
                         <span className="text-sm text-white truncate">{p.name}</span>
+                        <span className="text-[10px] text-[#b8860b] shrink-0">D{p.day || 1}</span>
                         {p.nickname && <span className="text-xs text-gray-500 shrink-0">"{p.nickname}"</span>}
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
