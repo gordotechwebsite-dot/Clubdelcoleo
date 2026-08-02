@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { api } from "../lib/api";
 import BetTicket from "../components/BetTicket";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import {
   Shield, Users, Calendar, Trophy, BarChart3, Ticket, Plus, Trash2, Save,
   X, ChevronDown, ChevronUp, Radio, RefreshCw, ArrowUpCircle, ArrowDownCircle, CheckCircle2, XCircle, Crown, Megaphone, Send, Database, Key, Download, Upload,
@@ -36,6 +37,11 @@ interface InviteCode {
 interface Stats {
   total_users: number; total_events: number; total_bets: number;
   total_bet_amount: number; pending_bets: number; active_events: number;
+  pending_deposits: number; pending_withdrawals: number;
+  total_deposit_amount: number; total_withdrawal_amount: number;
+  pending_deposit_amount: number; pending_withdrawal_amount: number;
+  total_balance: number;
+  daily: { date: string; bets: number; deposits: number; withdrawals: number }[];
 }
 interface DepositReq {
   id: number; user_id: number; username: string; amount: number; method: string;
@@ -162,15 +168,51 @@ function StatsPanel({ stats }: { stats: Stats }) {
     { label: "Apuestas Pendientes", value: stats.pending_bets ?? 0, color: "text-yellow-400" },
     { label: "Total Apostado", value: `$${formatCOP(stats.total_bet_amount)} COP`, color: "text-green-400" },
     { label: "Eventos Activos", value: stats.active_events ?? 0, color: "text-cyan-400" },
+    { label: "Depositos Aprobados", value: `$${formatCOP(stats.total_deposit_amount)}`, color: "text-green-400" },
+    { label: "Retiros Pagados", value: `$${formatCOP(stats.total_withdrawal_amount)}`, color: "text-red-400" },
+    { label: "Saldo en Cuentas", value: `$${formatCOP(stats.total_balance)}`, color: "text-[#ffd700]" },
+    { label: "Depositos Pendientes", value: `${stats.pending_deposits ?? 0} | $${formatCOP(stats.pending_deposit_amount)}`, color: "text-yellow-400" },
+    { label: "Retiros Pendientes", value: `${stats.pending_withdrawals ?? 0} | $${formatCOP(stats.pending_withdrawal_amount)}`, color: "text-orange-400" },
+    { label: "Balance Neto", value: `$${formatCOP((stats.total_deposit_amount ?? 0) - (stats.total_withdrawal_amount ?? 0))}`, color: "text-blue-400" },
   ];
+  const chartData = (stats.daily ?? []).map((d) => ({
+    dia: new Date(d.date + "T00:00:00-05:00").toLocaleDateString("es-CO", { day: "2-digit", month: "short", timeZone: "America/Bogota" }),
+    Depositos: d.deposits,
+    Retiros: d.withdrawals,
+    Apostado: d.bets,
+  }));
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-      {items.map((item, i) => (
-        <div key={i} className="card-dark rounded-xl p-4 text-center">
-          <p className={`text-xl font-bold ${item.color}`}>{item.value}</p>
-          <p className="text-xs text-gray-500 mt-1">{item.label}</p>
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        {items.map((item, i) => (
+          <div key={i} className="card-dark rounded-xl p-4 text-center">
+            <p className={`text-xl font-bold ${item.color}`}>{item.value}</p>
+            <p className="text-xs text-gray-500 mt-1">{item.label}</p>
+          </div>
+        ))}
+      </div>
+      {chartData.length > 0 && (
+        <div className="card-dark rounded-xl p-4">
+          <p className="text-sm font-semibold text-white mb-3">Actividad de los ultimos 7 dias</p>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#222" />
+                <XAxis dataKey="dia" stroke="#666" fontSize={11} />
+                <YAxis stroke="#666" fontSize={11} tickFormatter={(v: number) => v >= 1000 ? `${v / 1000}k` : `${v}`} />
+                <Tooltip
+                  contentStyle={{ background: "#111", border: "1px solid #333", borderRadius: 8, fontSize: 12 }}
+                  formatter={(v: number) => `$${formatCOP(v)}`}
+                />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Bar dataKey="Depositos" fill="#22c55e" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="Retiros" fill="#ef4444" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="Apostado" fill="#ffd700" radius={[3, 3, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
-      ))}
+      )}
     </div>
   );
 }
