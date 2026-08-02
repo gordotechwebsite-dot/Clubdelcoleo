@@ -756,6 +756,43 @@ async def list_all_bets(user=Depends(get_admin_user)):
         return [dict(b) for b in bets]
 
 
+@app.put("/api/admin/bets/{bet_id}/lose")
+async def mark_bet_lost(bet_id: int, user=Depends(get_admin_user)):
+    with get_db() as conn:
+        bet = conn.execute(
+            """SELECT b.*, e.name as event_name, p.name as player_name
+               FROM bets b
+               JOIN events e ON b.event_id = e.id
+               JOIN players p ON b.player_id = p.id
+               WHERE b.id = ?""",
+            (bet_id,)
+        ).fetchone()
+        if not bet:
+            raise HTTPException(status_code=404, detail="Apuesta no encontrada")
+        if bet["status"] != "pending":
+            raise HTTPException(status_code=400, detail="La apuesta ya fue resuelta")
+
+        conn.execute("UPDATE bets SET status = 'lost', resolved_at = ? WHERE id = ?",
+                     (now_colombia().isoformat(), bet_id))
+        conn.execute(
+            """INSERT INTO notifications (user_id, title, message, type)
+               VALUES (?, ?, ?, 'loss')""",
+            (bet["user_id"], "Apuesta perdida",
+             f"{bet['player_name']} no clasifico a la final de {bet['event_name']}.")
+        )
+        user_id = bet["user_id"]
+        event_name = bet["event_name"]
+        player_name = bet["player_name"]
+
+    await broadcast_to_user(user_id, "bet_lost", {
+        "title": "Apuesta perdida",
+        "message": f"{player_name} no clasifico a la final de {event_name}.",
+        "event_name": event_name,
+        "player_name": player_name,
+    })
+    return {"message": "Apuesta marcada como perdida"}
+
+
 @app.get("/api/admin/users/{user_id}/bets")
 async def get_user_bets(user_id: int, user=Depends(get_admin_user)):
     with get_db() as conn:

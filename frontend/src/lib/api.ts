@@ -173,6 +173,7 @@ export const api = {
   updateUser: (id: number, data: Record<string, unknown>) =>
     request(`/api/admin/users/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   getAllBets: () => request("/api/admin/bets"),
+  markBetLost: (betId: number) => request(`/api/admin/bets/${betId}/lose`, { method: "PUT" }),
   getUserBets: (userId: number) => request(`/api/admin/users/${userId}/bets`),
   generateInviteCodes: (count: number) =>
     request("/api/admin/invite-codes", { method: "POST", body: JSON.stringify({ count }) }),
