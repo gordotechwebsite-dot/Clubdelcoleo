@@ -775,7 +775,7 @@ async def get_user_bets(user_id: int, user=Depends(get_admin_user)):
 async def get_user_deposits(user_id: int, user=Depends(get_admin_user)):
     with get_db() as conn:
         deposits = conn.execute(
-            "SELECT * FROM deposits WHERE user_id = ? ORDER BY created_at DESC",
+            "SELECT * FROM deposit_requests WHERE user_id = ? ORDER BY created_at DESC",
             (user_id,)
         ).fetchall()
         return [dict(d) for d in deposits]
@@ -785,7 +785,7 @@ async def get_user_deposits(user_id: int, user=Depends(get_admin_user)):
 async def get_user_withdrawals(user_id: int, user=Depends(get_admin_user)):
     with get_db() as conn:
         withdrawals = conn.execute(
-            "SELECT * FROM withdrawals WHERE user_id = ? ORDER BY created_at DESC",
+            "SELECT * FROM withdrawal_requests WHERE user_id = ? ORDER BY created_at DESC",
             (user_id,)
         ).fetchall()
         return [dict(w) for w in withdrawals]
