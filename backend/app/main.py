@@ -214,11 +214,11 @@ async def get_event(event_id: int):
             raise HTTPException(status_code=404, detail="Evento no encontrado")
 
         players = conn.execute(
-            """SELECT p.*, ep.position, ep.odds
+            """SELECT p.*, ep.position, ep.odds, ep.day
                FROM players p
                JOIN event_players ep ON p.id = ep.player_id
                WHERE ep.event_id = ?
-               ORDER BY ep.position""",
+               ORDER BY ep.day, ep.position""",
             (event_id,)
         ).fetchall()
 
@@ -328,9 +328,9 @@ async def add_player_to_event(event_id: int, data: EventPlayerAdd, user=Depends(
 
         try:
             conn.execute(
-                """INSERT INTO event_players (event_id, player_id, position, odds)
-                   VALUES (?, ?, ?, ?)""",
-                (event_id, data.player_id, data.position, data.odds)
+                """INSERT INTO event_players (event_id, player_id, position, odds, day)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (event_id, data.player_id, data.position, data.odds, data.day)
             )
         except Exception:
             raise HTTPException(status_code=400, detail="Jugador ya esta en este evento")
@@ -351,6 +351,11 @@ async def update_player_in_event(event_id: int, player_id: int, data: dict, user
             conn.execute(
                 "UPDATE event_players SET odds = ? WHERE event_id = ? AND player_id = ?",
                 (data["odds"], event_id, player_id)
+            )
+        if "day" in data:
+            conn.execute(
+                "UPDATE event_players SET day = ? WHERE event_id = ? AND player_id = ?",
+                (data["day"], event_id, player_id)
             )
         return {"message": "Cuota actualizada exitosamente"}
 

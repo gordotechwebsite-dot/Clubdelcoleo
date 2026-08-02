@@ -7,6 +7,7 @@ import { Trophy, Star, TrendingUp, ArrowLeft, CheckCircle2, X, Search, ArrowUpDo
 interface Player {
   id: number; name: string; nickname: string; team: string; odds: number;
   position: number; stats_wins: number; stats_losses: number; rating: number;
+  day: number;
 }
 interface EventData {
   id: number; name: string; description: string; location: string;
@@ -33,6 +34,7 @@ export default function EventDetailPage() {
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<"position" | "odds_asc" | "odds_desc" | "name" | "rating">("position");
+  const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [user, setUserState] = useState(getUser());
 
   useEffect(() => {
@@ -41,9 +43,17 @@ export default function EventDetailPage() {
     api.getMe().then((me) => { setUser(me); setUserState(me); }).catch(() => {});
   }, [id]);
 
+  const days = useMemo(() => {
+    if (!event) return [];
+    return [...new Set(event.players.map(p => p.day || 1))].sort((a, b) => a - b);
+  }, [event]);
+
   const filteredPlayers = useMemo(() => {
     if (!event) return [];
     let players = [...event.players];
+    if (selectedDay !== null) {
+      players = players.filter(p => (p.day || 1) === selectedDay);
+    }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       players = players.filter(p =>
@@ -58,7 +68,7 @@ export default function EventDetailPage() {
       default: players.sort((a, b) => a.position - b.position);
     }
     return players;
-  }, [event, searchQuery, sortBy]);
+  }, [event, searchQuery, sortBy, selectedDay]);
 
   const winnerPlayer = useMemo(() => {
     if (!event || !event.winner_player_id) return null;
@@ -277,6 +287,29 @@ export default function EventDetailPage() {
         <h2 className="text-lg font-bold text-white flex items-center gap-2">
           <Trophy size={18} className="text-[#ffd700]" /> Coleadores Participantes
         </h2>
+        {days.length > 1 && (
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            <button
+              onClick={() => setSelectedDay(null)}
+              className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                selectedDay === null ? "bg-[#b8860b]/20 text-[#ffd700]" : "bg-[#111] text-gray-400 hover:text-gray-200"
+              }`}
+            >
+              Todos
+            </button>
+            {days.map((d) => (
+              <button
+                key={d}
+                onClick={() => setSelectedDay(d)}
+                className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                  selectedDay === d ? "bg-[#b8860b]/20 text-[#ffd700]" : "bg-[#111] text-gray-400 hover:text-gray-200"
+                }`}
+              >
+                Dia {d}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="space-y-2">
           {filteredPlayers.length === 0 && (
             <div className="card-dark rounded-xl p-6 text-center text-gray-500 text-sm">

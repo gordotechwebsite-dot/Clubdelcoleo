@@ -73,6 +73,7 @@ class EventPlayerAdd(BaseModel):
     player_id: int
     position: Optional[int] = None
     odds: float = 2.0
+    day: int = 1
 
 
 # Bet Models
