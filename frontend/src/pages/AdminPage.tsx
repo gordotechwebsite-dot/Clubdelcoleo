@@ -28,7 +28,8 @@ interface BetData {
   created_at: string; username: string; event_name: string; player_name: string;
 }
 interface InviteCode {
-  id: number; code: string; used: boolean; used_by: number | null; created_at: string;
+  id: number; code: string; is_used: number; used_by: number | null;
+  used_by_username: string | null; used_at: string | null; created_at: string;
 }
 interface Stats {
   total_users: number; total_events: number; total_bets: number;
@@ -1001,15 +1002,16 @@ function InvitesPanel({ invites, reload, showMsg }: {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {invites.map((inv) => (
-          <div key={inv.id} className={`card-dark rounded-lg p-3 flex items-center justify-between ${inv.used ? "opacity-50" : ""}`}>
+          <div key={inv.id} className={`card-dark rounded-lg p-3 flex items-center justify-between ${inv.is_used ? "opacity-50" : ""}`}>
             <div>
-              <p className="font-mono text-[#ffd700] font-bold text-sm tracking-wider">{inv.code}</p>
+              <p className={`font-mono font-bold text-sm tracking-wider ${inv.is_used ? "text-gray-500 line-through" : "text-[#ffd700]"}`}>{inv.code}</p>
               <p className="text-xs text-gray-600 mt-0.5">
                 {new Date(inv.created_at).toLocaleDateString("es-CO", { day: "numeric", month: "short", timeZone: "America/Bogota" })}
+                {inv.is_used && inv.used_by_username ? ` | ${inv.used_by_username}` : ""}
               </p>
             </div>
-            <span className={`text-xs px-2 py-0.5 rounded-full ${inv.used ? "bg-gray-500/20 text-gray-400" : "bg-green-500/20 text-green-400"}`}>
-              {inv.used ? "Usado" : "Disponible"}
+            <span className={`text-xs px-2 py-0.5 rounded-full ${inv.is_used ? "bg-gray-500/20 text-gray-400" : "bg-green-500/20 text-green-400"}`}>
+              {inv.is_used ? "Usado" : "Disponible"}
             </span>
           </div>
         ))}
