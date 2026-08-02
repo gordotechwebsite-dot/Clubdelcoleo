@@ -12,8 +12,8 @@ export default function BetTicket({ bet }: { bet: BetData }) {
   const [sharing, setSharing] = useState(false);
   const formatDate = (d: string) => {
     try {
-      const date = new Date(d.includes("T") ? d : d + "T00:00:00");
-      return date.toLocaleDateString("es-CO", { day: "numeric", month: "long", year: "numeric" });
+      const date = new Date(d.includes("T") ? d : d + "T00:00:00-05:00");
+      return date.toLocaleDateString("es-CO", { day: "numeric", month: "long", year: "numeric", timeZone: "America/Bogota" });
     } catch {
       return d;
     }
@@ -22,7 +22,7 @@ export default function BetTicket({ bet }: { bet: BetData }) {
   const formatTime = (d: string) => {
     try {
       const date = new Date(d);
-      return date.toLocaleTimeString("es-CO", { hour: "numeric", minute: "2-digit", hour12: true });
+      return date.toLocaleTimeString("es-CO", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/Bogota" });
     } catch {
       return "";
     }
