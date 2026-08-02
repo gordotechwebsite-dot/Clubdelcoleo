@@ -745,7 +745,8 @@ async def update_user_status(user_id: int, update: UserStatusUpdate, user=Depend
 async def list_all_bets(user=Depends(get_admin_user)):
     with get_db() as conn:
         bets = conn.execute(
-            """SELECT b.*, u.username, e.name as event_name, p.name as player_name
+            """SELECT b.*, u.username, e.name as event_name, e.date as event_date,
+                      e.time as event_time, e.location as event_location, p.name as player_name
                FROM bets b
                JOIN users u ON b.user_id = u.id
                JOIN events e ON b.event_id = e.id

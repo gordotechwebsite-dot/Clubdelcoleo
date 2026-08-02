@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { api } from "../lib/api";
+import BetTicket from "../components/BetTicket";
 import {
   Shield, Users, Calendar, Trophy, BarChart3, Ticket, Plus, Trash2, Save,
   X, ChevronDown, ChevronUp, Radio, RefreshCw, ArrowUpCircle, ArrowDownCircle, CheckCircle2, XCircle, Crown, Megaphone, Send, Database, Key, Download, Upload,
@@ -26,6 +27,7 @@ interface BetData {
   id: number; user_id: number; event_id: number; player_id: number; amount: number;
   odds: number; potential_win: number; status: string; ticket_code: string;
   created_at: string; username: string; event_name: string; player_name: string;
+  event_date: string; event_time: string; event_location: string;
 }
 interface InviteCode {
   id: number; code: string; is_used: number; used_by: number | null;
@@ -802,12 +804,27 @@ function UsersPanel({ users, reload, showMsg }: {
 /* === BETS === */
 function BetsPanel({ bets }: { bets: BetData[] }) {
   const formatCOP = (n: number) => n.toLocaleString("es-CO");
+  const [selectedBet, setSelectedBet] = useState<BetData | null>(null);
   return (
     <div className="space-y-4">
       <h2 className="font-bold text-white">Todas las Apuestas ({bets.length})</h2>
+      {selectedBet && (
+        <div className="fixed inset-0 z-50 bg-black/80 overflow-y-auto p-4" onClick={() => setSelectedBet(null)}>
+          <div className="min-h-full flex items-start justify-center py-6" onClick={(e) => e.stopPropagation()}>
+            <div className="w-full max-w-md space-y-3">
+              <div className="flex justify-end">
+                <button onClick={() => setSelectedBet(null)} className="text-gray-400 hover:text-white"><X size={20} /></button>
+              </div>
+              <BetTicket bet={selectedBet} />
+              <p className="text-center text-xs text-gray-500">Apostador: @{selectedBet.username}</p>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="space-y-2">
         {bets.map((bet) => (
-          <div key={bet.id} className="card-dark rounded-xl p-3 flex items-center justify-between">
+          <div key={bet.id} onClick={() => setSelectedBet(bet)}
+            className="card-dark rounded-xl p-3 flex items-center justify-between cursor-pointer hover:border-[#b8860b]/50 transition">
             <div>
               <div className="flex items-center gap-2">
                 <p className="font-semibold text-white text-sm">{bet.player_name}</p>
