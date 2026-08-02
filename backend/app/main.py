@@ -802,8 +802,45 @@ async def admin_stats(user=Depends(get_admin_user)):
         active_events = conn.execute("SELECT COUNT(*) as count FROM events WHERE status = 'upcoming'").fetchone()["count"]
         pending_deposits = conn.execute("SELECT COUNT(*) as count FROM deposit_requests WHERE status = 'pending'").fetchone()["count"]
         pending_withdrawals = conn.execute("SELECT COUNT(*) as count FROM withdrawal_requests WHERE status = 'pending'").fetchone()["count"]
+        total_deposit_amount = conn.execute(
+            "SELECT COALESCE(SUM(amount), 0) as total FROM deposit_requests WHERE status = 'approved'"
+        ).fetchone()["total"]
+        total_withdrawal_amount = conn.execute(
+            "SELECT COALESCE(SUM(amount), 0) as total FROM withdrawal_requests WHERE status = 'approved'"
+        ).fetchone()["total"]
+        pending_deposit_amount = conn.execute(
+            "SELECT COALESCE(SUM(amount), 0) as total FROM deposit_requests WHERE status = 'pending'"
+        ).fetchone()["total"]
+        pending_withdrawal_amount = conn.execute(
+            "SELECT COALESCE(SUM(amount), 0) as total FROM withdrawal_requests WHERE status = 'pending'"
+        ).fetchone()["total"]
+        total_balance = conn.execute(
+            "SELECT COALESCE(SUM(balance), 0) as total FROM users WHERE is_admin = 0"
+        ).fetchone()["total"]
+
+        daily = []
+        for offset in range(6, -1, -1):
+            day = (datetime.now(COLOMBIA_TZ) - timedelta(days=offset)).strftime("%Y-%m-%d")
+            bets_day = conn.execute(
+                "SELECT COALESCE(SUM(amount), 0) as total FROM bets WHERE date(created_at, '-5 hours') = ?", (day,)
+            ).fetchone()["total"]
+            dep_day = conn.execute(
+                "SELECT COALESCE(SUM(amount), 0) as total FROM deposit_requests WHERE status = 'approved' AND date(created_at, '-5 hours') = ?",
+                (day,)
+            ).fetchone()["total"]
+            wit_day = conn.execute(
+                "SELECT COALESCE(SUM(amount), 0) as total FROM withdrawal_requests WHERE status = 'approved' AND date(created_at, '-5 hours') = ?",
+                (day,)
+            ).fetchone()["total"]
+            daily.append({"date": day, "bets": bets_day, "deposits": dep_day, "withdrawals": wit_day})
 
         return {
+            "total_deposit_amount": total_deposit_amount,
+            "total_withdrawal_amount": total_withdrawal_amount,
+            "pending_deposit_amount": pending_deposit_amount,
+            "pending_withdrawal_amount": pending_withdrawal_amount,
+            "total_balance": total_balance,
+            "daily": daily,
             "total_users": total_users,
             "total_events": total_events,
             "total_bets": total_bets,
