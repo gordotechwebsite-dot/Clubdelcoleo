@@ -644,7 +644,7 @@ function UsersPanel({ users, reload, showMsg }: {
                   <div>
                     <div className="flex items-center gap-2">
                       <p className="font-semibold text-white text-sm">{u.full_name || u.username}</p>
-                      {u.is_admin && <span className="text-xs bg-[#b8860b]/20 text-[#ffd700] px-1.5 py-0.5 rounded">ADMIN</span>}
+                      {Boolean(u.is_admin) && <span className="text-xs bg-[#b8860b]/20 text-[#ffd700] px-1.5 py-0.5 rounded">ADMIN</span>}
                     </div>
                     <p className="text-xs text-gray-500">@{u.username} - {u.email}</p>
                   </div>
