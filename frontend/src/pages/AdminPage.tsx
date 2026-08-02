@@ -146,7 +146,7 @@ export default function AdminPage() {
           {tab === "events" && <EventsPanel events={events} players={players} reload={() => loadTab("events")} showMsg={showMsg} loadPlayers={() => api.getPlayers().then(setPlayers)} />}
           {tab === "players" && <PlayersPanel players={players} reload={() => loadTab("players")} showMsg={showMsg} />}
           {tab === "users" && <UsersPanel users={users} reload={() => loadTab("users")} showMsg={showMsg} />}
-          {tab === "bets" && <BetsPanel bets={bets} />}
+          {tab === "bets" && <BetsPanel bets={bets} reload={() => loadTab("bets")} showMsg={showMsg} />}
           {tab === "deposits" && <DepositsPanel deposits={adminDeposits} reload={() => loadTab("deposits")} showMsg={showMsg} />}
           {tab === "withdrawals" && <WithdrawalsPanel withdrawals={adminWithdrawals} reload={() => loadTab("withdrawals")} showMsg={showMsg} />}
           {tab === "invites" && <InvitesPanel invites={invites} reload={() => loadTab("invites")} showMsg={showMsg} />}
@@ -844,9 +844,22 @@ function UsersPanel({ users, reload, showMsg }: {
 }
 
 /* === BETS === */
-function BetsPanel({ bets }: { bets: BetData[] }) {
+function BetsPanel({ bets, reload, showMsg }: { bets: BetData[]; reload: () => void; showMsg: (m: string) => void }) {
   const formatCOP = (n: number) => n.toLocaleString("es-CO");
   const [selectedBet, setSelectedBet] = useState<BetData | null>(null);
+  const [marking, setMarking] = useState(false);
+
+  const markLost = async (bet: BetData) => {
+    if (!confirm(`Marcar como perdida la apuesta ${bet.ticket_code} de @${bet.username}?`)) return;
+    setMarking(true);
+    try {
+      await api.markBetLost(bet.id);
+      showMsg("Apuesta marcada como perdida");
+      setSelectedBet(null);
+      reload();
+    } catch { showMsg("Error al marcar la apuesta"); }
+    setMarking(false);
+  };
   return (
     <div className="space-y-4">
       <h2 className="font-bold text-white">Todas las Apuestas ({bets.length})</h2>
@@ -859,6 +872,12 @@ function BetsPanel({ bets }: { bets: BetData[] }) {
               </div>
               <BetTicket bet={selectedBet} />
               <p className="text-center text-xs text-gray-500">Apostador: @{selectedBet.username}</p>
+              {selectedBet.status === "pending" && (
+                <button onClick={() => markLost(selectedBet)} disabled={marking}
+                  className="w-full py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm font-semibold disabled:opacity-50">
+                  {marking ? "Marcando..." : "Marcar como perdida"}
+                </button>
+              )}
             </div>
           </div>
         </div>
