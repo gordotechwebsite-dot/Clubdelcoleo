@@ -174,6 +174,20 @@ export const api = {
     request(`/api/admin/users/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   getAllBets: () => request("/api/admin/bets"),
   markBetLost: (betId: number) => request(`/api/admin/bets/${betId}/lose`, { method: "PUT" }),
+  uploadEventImage: (eventId: number, image: File) => {
+    const formData = new FormData();
+    formData.append("image", image);
+    const token = getToken();
+    const headers: Record<string, string> = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    return fetch(`${API_URL}/api/admin/events/${eventId}/image`, { method: "POST", body: formData, headers }).then(async (res) => {
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.detail || `Error ${res.status}`);
+      }
+      return res.json();
+    });
+  },
   getUserBets: (userId: number) => request(`/api/admin/users/${userId}/bets`),
   generateInviteCodes: (count: number) =>
     request("/api/admin/invite-codes", { method: "POST", body: JSON.stringify({ count }) }),

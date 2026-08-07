@@ -4,12 +4,12 @@ import BetTicket from "../components/BetTicket";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import {
   Shield, Users, Calendar, Trophy, BarChart3, Ticket, Plus, Trash2, Save,
-  X, ChevronDown, ChevronUp, Radio, RefreshCw, ArrowUpCircle, ArrowDownCircle, CheckCircle2, XCircle, Crown, Megaphone, Send, Database, Key, Download, Upload,
+  X, ChevronDown, ChevronUp, Radio, RefreshCw, ArrowUpCircle, ArrowDownCircle, CheckCircle2, XCircle, Crown, Megaphone, Send, Database, Key, Download, Upload, Image as ImageIcon,
 } from "lucide-react";
 
 interface Event {
   id: number; name: string; description: string; location: string; country: string;
-  date: string; time: string; status: string; stream_url: string | null;
+  date: string; time: string; status: string; stream_url: string | null; image_url: string | null;
   players?: EventPlayer[];
 }
 interface Player {
@@ -228,6 +228,7 @@ function EventsPanel({ events, players, reload, showMsg, loadPlayers }: {
   const [addPlayer, setAddPlayer] = useState<{ eventId: number; playerId: string; odds: string; day: string } | null>(null);
   const [editEvent, setEditEvent] = useState<{ id: number; name: string; date: string; time: string; location: string; description: string } | null>(null);
   const [savingOdds, setSavingOdds] = useState<number | null>(null);
+  const [uploadingImage, setUploadingImage] = useState<number | null>(null);
   const oddsRefs = {} as Record<number, HTMLInputElement | null>;
 
   useEffect(() => { loadPlayers(); }, []);
@@ -259,6 +260,16 @@ function EventsPanel({ events, players, reload, showMsg, loadPlayers }: {
       showMsg("URL de transmision actualizada");
       reload();
     } catch { showMsg("Error al actualizar URL"); }
+  };
+
+  const handleImageUpload = async (eventId: number, file: File) => {
+    setUploadingImage(eventId);
+    try {
+      await api.uploadEventImage(eventId, file);
+      showMsg("Imagen del evento actualizada");
+      reload();
+    } catch (err) { showMsg(err instanceof Error ? err.message : "Error al subir la imagen"); }
+    setUploadingImage(null);
   };
 
   const handleUpdateOdds = async (eventId: number, playerId: number) => {
@@ -412,6 +423,23 @@ function EventsPanel({ events, players, reload, showMsg, loadPlayers }: {
                     <Save size={12} /> Editar Datos del Evento
                   </button>
                 )}
+
+                <div className="flex items-center gap-3">
+                  <div className="w-24 h-16 rounded-lg overflow-hidden bg-[#0a0a0a] border border-gray-700 shrink-0 flex items-center justify-center">
+                    {event.image_url
+                      ? <img src={event.image_url.startsWith("http") ? event.image_url : `${import.meta.env.VITE_API_URL || ""}${event.image_url}`} alt={event.name} className="w-full h-full object-cover" />
+                      : <ImageIcon size={18} className="text-gray-600" />}
+                  </div>
+                  <label className="text-xs text-[#ffd700] hover:text-[#b8860b] cursor-pointer">
+                    {uploadingImage === event.id ? "Subiendo..." : event.image_url ? "Cambiar imagen del evento" : "Subir imagen del evento"}
+                    <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleImageUpload(event.id, file);
+                        e.target.value = "";
+                      }} />
+                  </label>
+                </div>
 
                 <div className="flex items-center gap-2">
                   <Radio size={14} className="text-red-400" />

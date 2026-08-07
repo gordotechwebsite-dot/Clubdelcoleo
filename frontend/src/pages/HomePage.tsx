@@ -22,6 +22,9 @@ export default function HomePage() {
     return date.toLocaleDateString("es-CO", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "America/Bogota" });
   };
 
+  const imageSrc = (url: string) =>
+    url.startsWith("http") ? url : `${import.meta.env.VITE_API_URL || ""}${url}`;
+
   return (
     <div className="space-y-8 pb-20 md:pb-0">
       {/* Hero */}
@@ -56,19 +59,10 @@ export default function HomePage() {
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {[1,2,3].map(i => (
-              <div key={i} className="card-dark rounded-xl overflow-hidden">
-                <div className="h-2 skeleton" />
-                <div className="p-5 space-y-3">
-                  <div className="flex items-center gap-2">
-                    <div className="skeleton h-5 w-10" />
-                    <div className="skeleton h-5 w-3/4" />
-                  </div>
-                  <div className="skeleton h-4 w-full" />
-                  <div className="space-y-1.5">
-                    <div className="skeleton h-3.5 w-2/3" />
-                    <div className="skeleton h-3.5 w-1/3" />
-                    <div className="skeleton h-3.5 w-1/2" />
-                  </div>
+              <div key={i} className="card-dark rounded-2xl overflow-hidden">
+                <div className="aspect-[16/9] skeleton" />
+                <div className="px-4 py-3">
+                  <div className="skeleton h-3.5 w-2/3" />
                 </div>
               </div>
             ))}
@@ -81,29 +75,30 @@ export default function HomePage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {events.map((event) => (
               <Link key={event.id} to={`/events/${event.id}`}
-                className="card-dark rounded-xl overflow-hidden hover:border-[#b8860b]/50 transition-all group">
-                <div className="h-2 gold-gradient" />
-                <div className="p-5 space-y-3">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-bold text-white group-hover:text-[#ffd700] transition text-sm sm:text-base leading-tight">
-                        {event.name}
-                      </h3>
+                className="card-dark rounded-2xl overflow-hidden border border-gray-800 hover:border-[#b8860b] hover:shadow-[0_0_25px_rgba(184,134,11,0.15)] transition-all group">
+                <div className="relative aspect-[16/9] overflow-hidden bg-gradient-to-br from-[#1a1a1a] to-black">
+                  {event.image_url ? (
+                    <img src={imageSrc(event.image_url)} alt={event.name}
+                      className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <span className="text-5xl font-black text-[#b8860b]/20 tracking-tighter">COLEO</span>
                     </div>
-                    <span className="shrink-0 bg-green-500/20 text-green-400 text-xs font-bold px-2 py-0.5 rounded-full">
-                      ABIERTO
-                    </span>
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent" />
+                  <span className="absolute top-3 right-3 bg-green-500/25 text-green-300 border border-green-500/40 text-[10px] font-bold px-2.5 py-1 rounded-full backdrop-blur-sm">
+                    ABIERTO
+                  </span>
+                  <div className="absolute bottom-0 left-0 right-0 p-4">
+                    <h3 className="font-black text-white group-hover:text-[#ffd700] transition text-lg leading-tight uppercase drop-shadow">{event.name}</h3>
+                    <p className="text-[#daa520] text-xs font-semibold mt-1 uppercase tracking-wide">{event.location}</p>
                   </div>
-                  <p className="text-gray-400 text-xs line-clamp-2">{event.description}</p>
-                  <div className="space-y-1.5 text-xs text-gray-400">
-                    <p className="capitalize">{formatDate(event.date)}</p>
-                    <p>{event.location}</p>
-                  </div>
-                  <div className="pt-2 border-t border-gray-800">
-                    <span className="text-[#daa520] text-xs font-medium flex items-center gap-1">
-                      Apostar ahora <ChevronRight size={14} />
-                    </span>
-                  </div>
+                </div>
+                <div className="px-4 py-3 flex items-center justify-between gap-2 border-t border-gray-800">
+                  <p className="text-xs text-gray-400 capitalize">{formatDate(event.date)}</p>
+                  <span className="text-[#daa520] text-xs font-semibold flex items-center gap-0.5 shrink-0">
+                    Apostar <ChevronRight size={14} />
+                  </span>
                 </div>
               </Link>
             ))}

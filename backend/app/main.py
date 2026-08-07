@@ -521,6 +521,36 @@ COMPROBANTES_DIR = "/data/comprobantes"
 os.makedirs(COMPROBANTES_DIR, exist_ok=True)
 app.mount("/comprobantes", StaticFiles(directory=COMPROBANTES_DIR), name="comprobantes")
 
+EVENT_IMAGES_DIR = "/data/eventos"
+os.makedirs(EVENT_IMAGES_DIR, exist_ok=True)
+app.mount("/eventos", StaticFiles(directory=EVENT_IMAGES_DIR), name="eventos")
+
+
+@app.post("/api/admin/events/{event_id}/image")
+async def upload_event_image(
+    event_id: int,
+    image: UploadFile = File(...),
+    user=Depends(get_admin_user),
+):
+    if image.content_type not in ["image/jpeg", "image/png", "image/webp"]:
+        raise HTTPException(status_code=400, detail="Tipo de archivo no permitido. Usa JPG, PNG o WebP.")
+
+    with get_db() as conn:
+        event = conn.execute("SELECT id FROM events WHERE id = ?", (event_id,)).fetchone()
+        if not event:
+            raise HTTPException(status_code=404, detail="Evento no encontrado")
+
+    ext = image.filename.rsplit(".", 1)[-1] if "." in (image.filename or "") else "jpg"
+    filename = f"{uuid.uuid4().hex}.{ext}"
+    with open(os.path.join(EVENT_IMAGES_DIR, filename), "wb") as f:
+        f.write(await image.read())
+
+    image_url = f"/eventos/{filename}"
+    with get_db() as conn:
+        conn.execute("UPDATE events SET image_url = ? WHERE id = ?", (image_url, event_id))
+
+    return {"image_url": image_url}
+
 
 @app.post("/api/wallet/deposit")
 async def deposit(

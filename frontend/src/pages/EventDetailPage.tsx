@@ -12,6 +12,7 @@ interface Player {
 interface EventData {
   id: number; name: string; description: string; location: string;
   country: string; date: string; time: string; status: string; stream_url: string | null;
+  image_url: string | null;
   winner_player_id: number | null;
   players: Player[];
 }
@@ -218,7 +219,15 @@ export default function EventDetailPage() {
 
       {/* Event Header */}
       <div className="card-dark rounded-2xl overflow-hidden">
-        <div className="h-2 gold-gradient" />
+        {event.image_url ? (
+          <img
+            src={event.image_url.startsWith("http") ? event.image_url : `${import.meta.env.VITE_API_URL || ""}${event.image_url}`}
+            alt={event.name}
+            className="w-full max-h-[420px] object-contain bg-black"
+          />
+        ) : (
+          <div className="h-2 gold-gradient" />
+        )}
         <div className="p-5 sm:p-6 space-y-3">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-2">

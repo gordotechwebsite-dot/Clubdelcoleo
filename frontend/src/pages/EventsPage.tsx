@@ -6,6 +6,7 @@ import { ChevronRight, Search } from "lucide-react";
 interface Event {
   id: number; name: string; description: string; location: string;
   country: string; date: string; time: string; status: string; stream_url: string | null;
+  image_url: string | null;
 }
 
 export default function EventsPage() {
@@ -27,8 +28,11 @@ export default function EventsPage() {
 
   const formatDate = (d: string) => {
     const date = new Date(d + "T00:00:00-05:00");
-    return date.toLocaleDateString("es-CO", { weekday: "short", day: "numeric", month: "short", timeZone: "America/Bogota" });
+    return date.toLocaleDateString("es-CO", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "America/Bogota" });
   };
+
+  const imageSrc = (url: string) =>
+    url.startsWith("http") ? url : `${import.meta.env.VITE_API_URL || ""}${url}`;
 
   return (
     <div className="space-y-6 pb-20 md:pb-0">
@@ -68,19 +72,10 @@ export default function EventsPage() {
       {loading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {[1,2,3,4,5,6].map(i => (
-            <div key={i} className="card-dark rounded-xl overflow-hidden">
-              <div className="h-1.5 skeleton" />
-              <div className="p-5 space-y-3">
-                <div className="flex items-center gap-2">
-                  <div className="skeleton h-5 w-10" />
-                  <div className="skeleton h-5 w-3/4" />
-                </div>
-                <div className="skeleton h-4 w-full" />
-                <div className="space-y-1">
-                  <div className="skeleton h-3.5 w-2/3" />
-                  <div className="skeleton h-3.5 w-1/3" />
-                  <div className="skeleton h-3.5 w-1/2" />
-                </div>
+            <div key={i} className="card-dark rounded-2xl overflow-hidden">
+              <div className="aspect-[16/9] skeleton" />
+              <div className="px-4 py-3">
+                <div className="skeleton h-3.5 w-2/3" />
               </div>
             </div>
           ))}
@@ -93,32 +88,35 @@ export default function EventsPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((event) => (
             <Link key={event.id} to={`/events/${event.id}`}
-              className="card-dark rounded-xl overflow-hidden hover:border-[#b8860b]/50 transition-all group">
-              <div className={`h-1.5 ${event.status === "upcoming" ? "gold-gradient" : event.status === "live" ? "bg-green-500" : "bg-gray-600"}`} />
-              <div className="p-5 space-y-3">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-white group-hover:text-[#ffd700] transition text-sm leading-tight">{event.name}</h3>
+              className="card-dark rounded-2xl overflow-hidden border border-gray-800 hover:border-[#b8860b] hover:shadow-[0_0_25px_rgba(184,134,11,0.15)] transition-all group">
+              <div className="relative aspect-[16/9] overflow-hidden bg-gradient-to-br from-[#1a1a1a] to-black">
+                {event.image_url ? (
+                  <img src={imageSrc(event.image_url)} alt={event.name}
+                    className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-5xl font-black text-[#b8860b]/20 tracking-tighter">COLEO</span>
                   </div>
-                  <span className={`shrink-0 text-xs font-bold px-2 py-0.5 rounded-full ${
-                    event.status === "upcoming" ? "bg-green-500/20 text-green-400" :
-                    event.status === "live" ? "bg-red-500/20 text-red-400 animate-pulse" :
-                    "bg-gray-500/20 text-gray-400"
-                  }`}>
-                    {event.status === "upcoming" ? "ABIERTO" : event.status === "live" ? "EN VIVO" : "FINALIZADO"}
+                )}
+                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent" />
+                <span className={`absolute top-3 right-3 text-[10px] font-bold px-2.5 py-1 rounded-full backdrop-blur-sm ${
+                  event.status === "upcoming" ? "bg-green-500/25 text-green-300 border border-green-500/40" :
+                  event.status === "live" ? "bg-red-500/25 text-red-300 border border-red-500/40 animate-pulse" :
+                  "bg-gray-700/50 text-gray-300 border border-gray-600"
+                }`}>
+                  {event.status === "upcoming" ? "ABIERTO" : event.status === "live" ? "EN VIVO" : "FINALIZADO"}
+                </span>
+                <div className="absolute bottom-0 left-0 right-0 p-4">
+                  <h3 className="font-black text-white group-hover:text-[#ffd700] transition text-lg leading-tight uppercase drop-shadow">{event.name}</h3>
+                  <p className="text-[#daa520] text-xs font-semibold mt-1 uppercase tracking-wide">{event.location}</p>
+                </div>
+              </div>
+              <div className="px-4 py-3 flex items-center justify-between gap-2 border-t border-gray-800">
+                <p className="text-xs text-gray-400 capitalize">{formatDate(event.date)}</p>
+                {event.status !== "finished" && (
+                  <span className="text-[#daa520] text-xs font-semibold flex items-center gap-0.5 shrink-0">
+                    Apostar <ChevronRight size={14} />
                   </span>
-                </div>
-                <p className="text-gray-400 text-xs line-clamp-2">{event.description}</p>
-                <div className="space-y-1 text-xs text-gray-400">
-                  <p className="capitalize">{formatDate(event.date)}</p>
-                  <p>{event.location}</p>
-                </div>
-                {event.status === "upcoming" && (
-                  <div className="pt-2 border-t border-gray-800">
-                    <span className="text-[#daa520] text-xs font-medium flex items-center gap-1">
-                      Apostar ahora <ChevronRight size={14} />
-                    </span>
-                  </div>
                 )}
               </div>
             </Link>
